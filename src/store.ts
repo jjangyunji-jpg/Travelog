@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { del, get, set } from 'idb-keyval'
+import type { DiveSpot } from './data/diveSpots'
 
 export type Status = 'visited' | 'wish'
 
@@ -15,13 +16,45 @@ export interface Trip {
   createdAt: number
 }
 
+export interface Dive {
+  id: string
+  country: string
+  spotId: string
+  date: string
+  time: string
+  maxDepth?: number
+  avgDepth?: number
+  bottomTime?: number
+  waterTemp?: number
+  visibility?: number
+  startBar?: number
+  endBar?: number
+  weight?: number
+  gas: string
+  suit: string
+  entry: 'boat' | 'shore' | ''
+  current: '' | 'none' | 'weak' | 'medium' | 'strong'
+  buddy: string
+  shop: string
+  marineLife: string[]
+  mood: number
+  conditions: string[]
+  note: string
+  photoIds: string[]
+  createdAt: number
+}
+
 export interface AppData {
   statuses: Record<string, Status>
   trips: Trip[]
+  dives: Dive[]
+  customSpots: DiveSpot[]
+  /** 이 앱 이전에 기록한 다이빙 수 (로그 번호 시작값) */
+  diveOffset: number
 }
 
 const KEY = 'travelog:data:v1'
-const EMPTY: AppData = { statuses: {}, trips: [] }
+const EMPTY: AppData = { statuses: {}, trips: [], dives: [], customSpots: [], diveOffset: 0 }
 
 function load(): AppData {
   try {
@@ -60,7 +93,7 @@ export function useAppData() {
       const exists = d.trips.some((t) => t.id === trip.id)
       const trips = exists ? d.trips.map((t) => (t.id === trip.id ? trip : t)) : [...d.trips, trip]
       // 기록을 남긴 나라는 자동으로 '방문함'
-      return { trips, statuses: { ...d.statuses, [trip.country]: 'visited' } }
+      return { ...d, trips, statuses: { ...d.statuses, [trip.country]: 'visited' } }
     })
   }, [])
 
@@ -72,9 +105,27 @@ export function useAppData() {
     })
   }, [])
 
+  const saveDive = useCallback((dive: Dive, newSpot?: DiveSpot) => {
+    setData((d) => {
+      const exists = d.dives.some((x) => x.id === dive.id)
+      const dives = exists ? d.dives.map((x) => (x.id === dive.id ? dive : x)) : [...d.dives, dive]
+      const customSpots = newSpot ? [...d.customSpots, newSpot] : d.customSpots
+      return { ...d, dives, customSpots, statuses: { ...d.statuses, [dive.country]: 'visited' } }
+    })
+  }, [])
+
+  const deleteDive = useCallback((id: string) => {
+    setData((d) => {
+      d.dives.find((x) => x.id === id)?.photoIds.forEach((p) => del(photoKey(p)))
+      return { ...d, dives: d.dives.filter((x) => x.id !== id) }
+    })
+  }, [])
+
+  const setDiveOffset = useCallback((n: number) => setData((d) => ({ ...d, diveOffset: Math.max(0, n || 0) })), [])
+
   const replaceAll = useCallback((next: AppData) => setData({ ...EMPTY, ...next }), [])
 
-  return { data, setStatus, saveTrip, deleteTrip, replaceAll }
+  return { data, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */
@@ -135,7 +186,7 @@ const blobToDataUrl = (b: Blob) =>
 
 export async function exportBackup(data: AppData) {
   const photos: Record<string, string> = {}
-  for (const t of data.trips)
+  for (const t of [...data.trips, ...data.dives])
     for (const p of t.photoIds) {
       const b = await getPhoto(p)
       if (b) photos[p] = await blobToDataUrl(b)

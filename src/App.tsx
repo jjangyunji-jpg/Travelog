@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { I18nContext, useI18n, type Lang } from './i18n'
-import { exportBackup, importBackup, useAppData, type Trip } from './store'
+import { exportBackup, importBackup, useAppData, type Dive, type Trip } from './store'
 import { computeStats } from './stats'
-import WorldMap from './components/WorldMap'
+import { diveNumbers, sortDivesDesc, spotMap } from './dive'
+import WorldMap, { type MapMarker, type MapMode } from './components/WorldMap'
 import CountrySheet from './components/CountrySheet'
 import TripForm from './components/TripForm'
 import TripDetail from './components/TripDetail'
@@ -11,12 +12,19 @@ import CountryListView from './components/CountryListView'
 import JournalView from './components/JournalView'
 import ShareSheet from './components/ShareSheet'
 import TripCard from './components/TripCard'
+import DiveForm from './components/DiveForm'
+import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, SpotSheet } from './components/DiveViews'
+import Sheet from './components/Sheet'
 
-type Tab = 'map' | 'journal' | 'stats' | 'list'
+type Tab = 'map' | 'journal' | 'dive' | 'stats' | 'list'
 type Modal =
   | { kind: 'country'; code: string }
   | { kind: 'form'; trip?: Trip; country?: string; back?: string }
   | { kind: 'trip'; trip: Trip; back?: string }
+  | { kind: 'diveCountry'; code: string }
+  | { kind: 'spot'; id: string }
+  | { kind: 'diveForm'; dive?: Dive; country?: string; spotId?: string; back?: Modal }
+  | { kind: 'dive'; dive: Dive; back?: Modal }
   | { kind: 'share' }
   | { kind: 'settings' }
   | null
@@ -33,15 +41,20 @@ function initialLang(): Lang {
 
 export default function App() {
   const [lang, setLangState] = useState<Lang>(initialLang)
-  const setLang = (l: Lang) => {
-    setLangState(l)
-    try {
-      localStorage.setItem('travelog:lang', l)
-    } catch {
-      /* 무시 */
-    }
-  }
-  const ctx = useMemo(() => ({ lang, setLang }), [lang])
+  const ctx = useMemo(
+    () => ({
+      lang,
+      setLang: (l: Lang) => {
+        setLangState(l)
+        try {
+          localStorage.setItem('travelog:lang', l)
+        } catch {
+          /* 무시 */
+        }
+      },
+    }),
+    [lang],
+  )
   return (
     <I18nContext.Provider value={ctx}>
       <Main />
@@ -51,13 +64,50 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setStatus, saveTrip, deleteTrip, replaceAll } = useAppData()
+  const { data, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
+  const [mapMode, setMapMode] = useState<MapMode>('travel')
+  const [showAllSpots, setShowAllSpots] = useState(true)
+  const [focus, setFocus] = useState<{ code: string; n: number } | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   const stats = computeStats(data)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const openCountry = (code: string) => setModal({ kind: 'country', code })
+  const spots = useMemo(() => spotMap(data), [data])
+  const numbers = useMemo(() => diveNumbers(data), [data])
+  const diveCountries = useMemo(() => new Set(data.dives.map((d) => d.country)), [data.dives])
+  const markers = useMemo<MapMarker[]>(() => {
+    if (mapMode !== 'dive') return []
+    const mine = new Set(data.dives.map((d) => d.spotId))
+    return Object.values(spots)
+      .filter((s) => isFinite(s.lat) && isFinite(s.lon) && (mine.has(s.id) || (showAllSpots && !s.custom)))
+      .map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, kind: mine.has(s.id) ? 'mine' : 'other' }))
+  }, [mapMode, spots, data.dives, showAllSpots])
+
+  const goTab = (next: Tab) => {
+    setFocus(null)
+    setTab(next)
+  }
+  const zoomTo = (code: string) => setFocus((f) => ({ code, n: (f?.n ?? 0) + 1 }))
+
+  const openCountry = (code: string) => {
+    if (tab === 'map' && mapMode === 'dive') {
+      zoomTo(code)
+      setModal({ kind: 'diveCountry', code })
+    } else setModal({ kind: 'country', code })
+  }
+  const openDiveCountry = (code: string) => {
+    setTab('map')
+    setMapMode('dive')
+    zoomTo(code)
+    setModal({ kind: 'diveCountry', code })
+  }
+  const openSpot = (id: string) => {
+    const s = spots[id]
+    if (s && isFinite(s.lat) && tab === 'map') setFocus((f) => ({ code: s.country, n: (f?.n ?? 0) + 1 }))
+    setModal({ kind: 'spot', id })
+  }
+
   const backTo = (code?: string) => setModal(code ? { kind: 'country', code } : null)
   const tripsOf = (code: string) =>
     data.trips.filter((tr) => tr.country === code).sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))
@@ -80,6 +130,8 @@ function Main() {
     }
   }
 
+  const recentDives = sortDivesDesc(data.dives).slice(0, 3)
+
   return (
     <div className="app">
       <header className="topbar">
@@ -95,22 +147,50 @@ function Main() {
       <main className="content">
         {tab === 'map' && (
           <div className="map-page">
-            <div className="summary">
-              <div className="sum-item"><b>{stats.visited.length}</b><span>{t.visitedCountries}</span></div>
-              <div className="sum-item"><b>{stats.percent}%</b><span>{t.ofWorld}</span></div>
-              <div className="sum-item"><b>{stats.wish.length}</b><span>{t.wishCountries}</span></div>
+            <div className="mode-switch" role="tablist">
+              <button className={mapMode === 'travel' ? 'on' : ''} onClick={() => setMapMode('travel')}>🌍 {t.travel}</button>
+              <button className={mapMode === 'dive' ? 'on dive' : ''} onClick={() => setMapMode('dive')}>🤿 {t.dive}</button>
             </div>
-            <WorldMap statuses={data.statuses} selected={modal?.kind === 'country' ? modal.code : undefined} onSelect={openCountry} />
-            <div className="legend">
-              <span><i className="dot visited" />{t.visited}</span>
-              <span><i className="dot wish" />{t.wish}</span>
-              <span className="muted">{t.tapHint}</span>
-            </div>
-            {data.trips.length > 0 && (
+            {mapMode === 'travel' ? (
+              <div className="summary">
+                <div className="sum-item"><b>{stats.visited.length}</b><span>{t.visitedCountries}</span></div>
+                <div className="sum-item"><b>{stats.percent}%</b><span>{t.ofWorld}</span></div>
+                <div className="sum-item"><b>{stats.wish.length}</b><span>{t.wishCountries}</span></div>
+              </div>
+            ) : (
+              <DiveStatsRow data={data} />
+            )}
+            <WorldMap
+              statuses={data.statuses}
+              mode={mapMode}
+              diveCountries={diveCountries}
+              markers={markers}
+              focus={focus}
+              selected={modal && 'code' in modal && (modal.kind === 'country' || modal.kind === 'diveCountry') ? modal.code : undefined}
+              onSelect={openCountry}
+              onSelectSpot={openSpot}
+            />
+            {mapMode === 'travel' ? (
+              <div className="legend">
+                <span><i className="dot visited" />{t.visited}</span>
+                <span><i className="dot wish" />{t.wish}</span>
+                <span className="muted">{t.tapHint}</span>
+              </div>
+            ) : (
+              <div className="legend">
+                <span><i className="dot mine" />{t.mySpots}</span>
+                <label className="toggle">
+                  <input type="checkbox" checked={showAllSpots} onChange={(e) => setShowAllSpots(e.target.checked)} />
+                  <i className="dot other" />{t.showAllSpots}
+                </label>
+                <span className="muted">{t.diveTapHint}</span>
+              </div>
+            )}
+            {mapMode === 'travel' && data.trips.length > 0 && (
               <section className="recent">
                 <div className="section-head">
                   <h3>{lang === 'ko' ? '최근 여행' : 'Recent trips'}</h3>
-                  <button className="btn ghost small" onClick={() => setTab('journal')}>{lang === 'ko' ? '전체 보기' : 'See all'}</button>
+                  <button className="btn ghost small" onClick={() => goTab('journal')}>{t.seeAll}</button>
                 </div>
                 <div className="trip-list">
                   {[...data.trips]
@@ -120,10 +200,30 @@ function Main() {
                 </div>
               </section>
             )}
+            {mapMode === 'dive' && (
+              <section className="recent">
+                <div className="section-head">
+                  <h3>{t.recentDives}</h3>
+                  {recentDives.length > 0 ? (
+                    <button className="btn ghost small" onClick={() => goTab('dive')}>{t.seeAll}</button>
+                  ) : (
+                    <button className="btn primary small" onClick={() => setModal({ kind: 'diveForm' })}>＋ {t.addDive}</button>
+                  )}
+                </div>
+                <div className="trip-list">
+                  {recentDives.map((d) => (
+                    <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spots[d.spotId]} onClick={() => setModal({ kind: 'dive', dive: d })} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
         {tab === 'journal' && (
           <JournalView trips={data.trips} onOpen={(trip) => setModal({ kind: 'trip', trip })} onAdd={() => setModal({ kind: 'form' })} />
+        )}
+        {tab === 'dive' && (
+          <DiveLogView data={data} numbers={numbers} onOpen={(d) => setModal({ kind: 'dive', dive: d })} onAdd={() => setModal({ kind: 'diveForm' })} />
         )}
         {tab === 'stats' && <StatsView data={data} onSelect={openCountry} />}
         {tab === 'list' && <CountryListView statuses={data.statuses} onSelect={openCountry} onStatus={setStatus} />}
@@ -134,11 +234,12 @@ function Main() {
           [
             ['map', '🗺️', t.map],
             ['journal', '📔', t.journal],
+            ['dive', '🤿', t.logbook],
             ['stats', '📊', t.stats],
             ['list', '🌐', t.list],
           ] as [Tab, string, string][]
         ).map(([id, icon, label]) => (
-          <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+          <button key={id} className={tab === id ? 'on' : ''} onClick={() => goTab(id)}>
             <span className="tab-icon">{icon}</span>
             <span>{label}</span>
           </button>
@@ -150,6 +251,9 @@ function Main() {
           code={modal.code}
           status={data.statuses[modal.code]}
           trips={tripsOf(modal.code)}
+          diveCount={data.dives.filter((d) => d.country === modal.code).length}
+          spotCount={Object.values(spots).filter((s) => s.country === modal.code).length}
+          onDive={() => openDiveCountry(modal.code)}
           onStatus={(s) => setStatus(modal.code, s)}
           onAddTrip={() => setModal({ kind: 'form', country: modal.code, back: modal.code })}
           onOpenTrip={(trip) => setModal({ kind: 'trip', trip, back: modal.code })}
@@ -178,28 +282,76 @@ function Main() {
           onClose={() => backTo(modal.back)}
         />
       )}
+
+      {modal?.kind === 'diveCountry' && (
+        <DiveCountrySheet
+          code={modal.code}
+          data={data}
+          onOpenSpot={openSpot}
+          onAddDive={() => setModal({ kind: 'diveForm', country: modal.code, back: modal })}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.kind === 'spot' && spots[modal.id] && (
+        <SpotSheet
+          spot={spots[modal.id]}
+          data={data}
+          numbers={numbers}
+          onOpenDive={(d) => setModal({ kind: 'dive', dive: d, back: modal })}
+          onAddDive={() => setModal({ kind: 'diveForm', country: spots[modal.id].country, spotId: modal.id, back: modal })}
+          onBack={() => setModal({ kind: 'diveCountry', code: spots[modal.id].country })}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.kind === 'diveForm' && (
+        <DiveForm
+          data={data}
+          initial={modal.dive}
+          country={modal.country}
+          spotId={modal.spotId}
+          onSave={(dive, newSpot) => {
+            saveDive(dive, newSpot)
+            setModal({ kind: 'dive', dive, back: modal.back })
+          }}
+          onDelete={(id) => {
+            deleteDive(id)
+            setModal(modal.back?.kind === 'dive' ? null : (modal.back ?? null))
+          }}
+          onClose={() => setModal(modal.dive ? { kind: 'dive', dive: modal.dive, back: modal.back } : (modal.back ?? null))}
+        />
+      )}
+      {modal?.kind === 'dive' && (
+        <DiveDetail
+          dive={data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive}
+          no={numbers[modal.dive.id]}
+          spot={spots[(data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive).spotId]}
+          onEdit={() => setModal({ kind: 'diveForm', dive: data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive, back: modal.back })}
+          onClose={() => setModal(modal.back ?? null)}
+        />
+      )}
+
       {modal?.kind === 'share' && <ShareSheet data={data} onClose={() => setModal(null)} />}
       {modal?.kind === 'settings' && (
-        <div className="sheet-backdrop" onClick={() => setModal(null)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-head">
-              <div className="sheet-title">{t.settings}</div>
-              <button className="icon-btn" onClick={() => setModal(null)}>✕</button>
-            </div>
-            <div className="sheet-body settings">
-              <button className="btn ghost block" onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}>🌐 {t.language}</button>
-              <button className="btn ghost block" onClick={doExport}>⬇︎ {t.backup}</button>
-              <button className="btn ghost block" onClick={() => fileRef.current?.click()}>⬆︎ {t.restore}</button>
-              <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => doImport(e.target.files?.[0])} />
-              <p className="muted small">
-                {lang === 'ko'
-                  ? '모든 기록과 사진은 이 기기(브라우저)에만 저장돼요. 기기를 바꾸기 전에 백업을 내보내 주세요.'
-                  : 'Your data and photos are stored only on this device. Export a backup before switching devices.'}
-              </p>
-            </div>
+        <Sheet onClose={() => setModal(null)} title={t.settings}>
+          <div className="settings">
+            <button className="btn ghost block" onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}>🌐 {t.language}</button>
+            <label className="setting-row">
+              <span>
+                🤿 {t.diveOffset}
+                <small className="muted">{t.diveOffsetHint}</small>
+              </span>
+              <input type="number" inputMode="numeric" min={0} value={data.diveOffset || ''} placeholder="0" onChange={(e) => setDiveOffset(Number(e.target.value))} />
+            </label>
+            <button className="btn ghost block" onClick={doExport}>⬇︎ {t.backup}</button>
+            <button className="btn ghost block" onClick={() => fileRef.current?.click()}>⬆︎ {t.restore}</button>
+            <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => doImport(e.target.files?.[0])} />
+            <p className="muted small">
+              {lang === 'ko'
+                ? '모든 기록과 사진은 이 기기(브라우저)에만 저장돼요. 기기를 바꾸기 전에 백업을 내보내 주세요.'
+                : 'Your data and photos are stored only on this device. Export a backup before switching devices.'}
+            </p>
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   )

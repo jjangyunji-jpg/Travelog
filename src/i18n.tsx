@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { Continent, Country } from './data/countries'
+import type { DiveSpot } from './data/diveSpots'
 
 export type Lang = 'ko' | 'en'
 
@@ -20,6 +21,23 @@ const dict = {
     language: 'English', tapHint: '나라를 눌러 표시해 보세요', close: '닫기',
     country: '나라', download: '이미지 저장', myMap: '나의 여행 지도', selectCountry: '나라 선택',
     days: '일', reset: '초기화',
+    dive: '다이빙', travel: '여행', logbook: '로그북', addDive: '다이빙 기록', editDive: '다이빙 기록 수정',
+    noDives: '아직 다이빙 기록이 없어요.', noDivesHint: '지도에서 🤿 다이빙 모드로 바꾸고 나라를 눌러 스팟을 찾아보세요.',
+    spot: '다이빙 스팟', selectSpot: '스팟 선택', newSpot: '＋ 새 스팟 직접 추가', spotName: '스팟 이름', spotNamePh: '예: 문섬 새끼섬',
+    location: '위치', pickOnMap: '🗺️ 지도에서 고르기', useGps: '📍 현재 위치', lat: '위도', lon: '경도',
+    date: '날짜', time: '입수 시간', numbers: '다이빙 수치', maxDepth: '최대 수심', avgDepth: '평균 수심',
+    bottomTime: '다이빙 시간', waterTemp: '수온', visibility: '시야', startBar: '시작 압력', endBar: '종료 압력',
+    weight: '웨이트', gas: '기체', suit: '슈트', entry: '입수', boat: '보트', shore: '비치', current: '조류',
+    curNone: '없음', curWeak: '약함', curMedium: '보통', curStrong: '강함', gear: '장비·환경', people: '함께한 사람',
+    buddy: '버디', shop: '다이빙샵·가이드', marineLife: '본 생물', addCustom: '직접 입력 후 Enter',
+    mood: '오늘 다이빙은 어땠나요?', condition: '몸 상태', diveNote: '다이빙 일기', diveNotePh: '물속에서 본 것, 느낀 것을 남겨 보세요…',
+    totalDives: '총 다이빙', totalTime: '총 수중 시간', deepest: '최대 수심', diveCountries: '다이빙한 나라', species: '본 생물',
+    spotsIn: '다이빙 스팟', mySpots: '내가 간 스팟', otherSpots: '추천 스팟', divesHere: '이 스팟 다이빙 기록',
+    diveHere: '＋ 여기서 다이빙 기록', showAllSpots: '추천 스팟 표시', diveOffset: '이 앱 이전 다이빙 횟수',
+    diveOffsetHint: '로그 번호가 이 숫자 다음부터 시작돼요.', times: '회', approx: '스팟 위치는 대략적인 좌표예요.',
+    pickHint: '지도를 눌러 스팟 위치를 고르세요', confirm: '확인', diveTapHint: '나라를 누르면 다이빙 스팟이 보여요',
+    noSpots: '등록된 스팟이 없어요. 직접 추가해 보세요.', viewDives: '🤿 다이빙 보기', recentDives: '최근 다이빙',
+    seeAll: '전체 보기', airUsed: '사용 공기', unknownSpot: '알 수 없는 스팟', nitrox: '나이트록스',
   },
   en: {
     map: 'Map', journal: 'Journal', stats: 'Stats', list: 'Countries',
@@ -37,6 +55,23 @@ const dict = {
     language: '한국어', tapHint: 'Tap a country to mark it', close: 'Close',
     country: 'Country', download: 'Save image', myMap: 'My Travel Map', selectCountry: 'Select a country',
     days: 'days', reset: 'Reset',
+    dive: 'Dive', travel: 'Travel', logbook: 'Logbook', addDive: 'Log a dive', editDive: 'Edit dive',
+    noDives: 'No dives logged yet.', noDivesHint: 'Switch the map to 🤿 Dive mode and tap a country to explore dive sites.',
+    spot: 'Dive site', selectSpot: 'Select a site', newSpot: '＋ Add a new site', spotName: 'Site name', spotNamePh: 'e.g. Secret Reef',
+    location: 'Location', pickOnMap: '🗺️ Pick on map', useGps: '📍 Current location', lat: 'Lat', lon: 'Lon',
+    date: 'Date', time: 'Time in', numbers: 'Dive data', maxDepth: 'Max depth', avgDepth: 'Avg depth',
+    bottomTime: 'Bottom time', waterTemp: 'Water temp', visibility: 'Visibility', startBar: 'Start pressure', endBar: 'End pressure',
+    weight: 'Weight', gas: 'Gas', suit: 'Suit', entry: 'Entry', boat: 'Boat', shore: 'Shore', current: 'Current',
+    curNone: 'None', curWeak: 'Weak', curMedium: 'Medium', curStrong: 'Strong', gear: 'Gear & conditions', people: 'People',
+    buddy: 'Buddy', shop: 'Dive shop / Guide', marineLife: 'Marine life', addCustom: 'Type and press Enter',
+    mood: 'How was this dive?', condition: 'How you felt', diveNote: 'Dive diary', diveNotePh: 'What you saw and felt underwater…',
+    totalDives: 'Total dives', totalTime: 'Time underwater', deepest: 'Deepest', diveCountries: 'Countries', species: 'Species',
+    spotsIn: 'Dive sites', mySpots: 'My sites', otherSpots: 'Popular sites', divesHere: 'My dives here',
+    diveHere: '＋ Log a dive here', showAllSpots: 'Show popular sites', diveOffset: 'Dives before this app',
+    diveOffsetHint: 'Log numbers will continue from this number.', times: 'dives', approx: 'Site locations are approximate.',
+    pickHint: 'Tap the map to set the site location', confirm: 'Done', diveTapHint: 'Tap a country to see dive sites',
+    noSpots: 'No sites listed yet. Add your own.', viewDives: '🤿 View dives', recentDives: 'Recent dives',
+    seeAll: 'See all', airUsed: 'Air used', unknownSpot: 'Unknown site', nitrox: 'Nitrox',
   },
 } as const
 
@@ -57,5 +92,7 @@ export function useI18n() {
     t: dict[lang] as Dict,
     cName: (c: Country | undefined) => (c ? (lang === 'ko' ? c.nameKo : c.nameEn) : ''),
     contName: (c: Continent) => continentNames[lang][c],
+    spotName: (s: DiveSpot | undefined) => (s ? (lang === 'ko' ? s.nameKo : s.nameEn) : ''),
+    pick: <T,>(ko: T, en: T) => (lang === 'ko' ? ko : en),
   }
 }

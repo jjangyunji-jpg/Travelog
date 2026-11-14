@@ -23,6 +23,12 @@ const TERRITORIES = new Set(
     'AC BQ BV CC CX GF GI GP MQ RE SJ TA TK UM YT').split(' '),
 )
 
+/** 라이브러리 기본 이름 대신 쓸 한국어 이름 */
+const KO_OVERRIDES: Record<string, string> = {
+  TW: '대만', CZ: '체코', RU: '러시아', MK: '북마케도니아', SZ: '에스와티니', TC: '터크스 케이커스 제도',
+  BQ: '카리브 네덜란드(보네르)', CW: '퀴라소', CG: '콩고 공화국', FM: '미크로네시아 연방', CV: '카보베르데',
+}
+
 const EXTRA_NAMES: Record<string, { en: string; ko: string }> = {
   XK: { en: 'Kosovo', ko: '코소보' },
   AC: { en: 'Ascension Island', ko: '어센션섬' },
@@ -33,7 +39,7 @@ export const COUNTRIES: Country[] = Object.entries(countryList)
   .map(([code, c]) => ({
     code,
     nameEn: isoCountries.getName(code, 'en') ?? EXTRA_NAMES[code]?.en ?? c.name,
-    nameKo: isoCountries.getName(code, 'ko') ?? EXTRA_NAMES[code]?.ko ?? c.name,
+    nameKo: KO_OVERRIDES[code] ?? isoCountries.getName(code, 'ko') ?? EXTRA_NAMES[code]?.ko ?? c.name,
     continent: c.continent as Continent,
     sovereign: !TERRITORIES.has(code),
   }))
