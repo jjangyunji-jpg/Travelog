@@ -5,7 +5,7 @@ import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } fro
 import { computeStats, visitCounts, visitLevel } from './stats'
 import { geocodeCities, geocodeFromTitle, splitCities } from './geo'
 import { diveNumbers, sortDivesDesc, spotMap } from './dive'
-import WorldMap, { type MapMarker, type MapMode, type TravelView } from './components/WorldMap'
+import WorldMap, { type MapMarker, type MapMode } from './components/WorldMap'
 import CountrySheet from './components/CountrySheet'
 import TripForm from './components/TripForm'
 import TripDetail from './components/TripDetail'
@@ -20,6 +20,7 @@ import DiveForm from './components/DiveForm'
 import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, SpotSheet } from './components/DiveViews'
 import Sheet from './components/Sheet'
 import ImportSheet from './components/ImportSheet'
+import MapSearch from './components/MapSearch'
 import CountrySelect from './components/CountrySelect'
 import PlanSheet, { type Plan } from './components/PlanSheet'
 import { SPECIES } from './data/species'
@@ -83,21 +84,6 @@ function Main() {
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
-  const [travelView, setTravelViewState] = useState<TravelView>(() => {
-    try {
-      return localStorage.getItem('travelog:view') === 'city' ? 'city' : 'country'
-    } catch {
-      return 'country'
-    }
-  })
-  const setTravelView = (v: TravelView) => {
-    setTravelViewState(v)
-    try {
-      localStorage.setItem('travelog:view', v)
-    } catch {
-      /* 무시 */
-    }
-  }
   const [focus, setFocus] = useState<{ code: string; n: number } | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   const stats = computeStats(data)
@@ -129,7 +115,7 @@ function Main() {
     return () => window.removeEventListener('online', on)
   }, [])
   useEffect(() => {
-    if (mapMode !== 'travel' || travelView !== 'city' || !navigator.onLine) return
+    if (mapMode !== 'travel' || !navigator.onLine) return
     // 좌표가 없는 도시 이름이 하나라도 있는 기록
     const missing = (t: Trip) => splitCities(t.city).filter((n) => !(t.places ?? []).some((p) => p.name === n))
     // 도시 칸이 비어 있으면 제목에서 지명 찾기 (예: "오키나와 여행")
@@ -160,18 +146,19 @@ function Main() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapMode, travelView, data.trips, geoRetry])
+  }, [mapMode, data.trips, geoRetry])
 
   // 지도에 점이 없는 여행 (도시를 못 찾았거나 비어 있음)
   const noCityTrips = geoBusy ? [] : data.trips.filter((tr) => !tr.places?.length && geoTried.current.has(tr.id + tr.city + tr.title))
 
   const markers = useMemo<MapMarker[]>(() => {
-    if (mapMode === 'travel') return travelView === 'city' ? cityPins : []
+    // 여행 지도: 나라 색 위에 간 도시 점을 함께
+    if (mapMode === 'travel') return cityPins
     const mine = new Set(data.dives.map((d) => d.spotId))
     return Object.values(spots)
       .filter((s) => isFinite(s.lat) && isFinite(s.lon) && (mine.has(s.id) || (showAllSpots && !s.custom)))
       .map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, kind: mine.has(s.id) ? 'mine' : 'other' }))
-  }, [mapMode, travelView, cityPins, spots, data.dives, showAllSpots])
+  }, [mapMode, cityPins, spots, data.dives, showAllSpots])
 
   const goTab = (next: Tab) => {
     setFocus(null)
@@ -285,10 +272,17 @@ function Main() {
             ) : (
               <DiveStatsRow data={data} />
             )}
+            <MapSearch
+              statuses={data.statuses}
+              onPick={(code) => {
+                // 검색한 나라로 확대하고 바로 열기 (여행: 가 봤어요/가고 싶어요, 다이빙: 스팟 목록)
+                zoomTo(code)
+                setModal(mapMode === 'dive' ? { kind: 'diveCountry', code } : { kind: 'country', code })
+              }}
+            />
             <WorldMap
               statuses={data.statuses}
               mode={mapMode}
-              travelView={travelView}
               levels={levels}
               home={data.home}
               diveCountries={diveCountries}
@@ -300,31 +294,22 @@ function Main() {
             />
             {mapMode === 'travel' ? (
               <div className="legend">
-                <div className="view-switch" role="tablist">
-                  <button className={travelView === 'country' ? 'on' : ''} onClick={() => setTravelView('country')}>🏳 {lang === 'ko' ? '나라' : 'Countries'}</button>
-                  <button className={travelView === 'city' ? 'on' : ''} onClick={() => setTravelView('city')}>📍 {lang === 'ko' ? '도시' : 'Cities'}</button>
-                </div>
-                {travelView === 'country' ? (
-                  <>
-                    <span className="steps-legend" title={lang === 'ko' ? '방문 횟수' : 'Visits'}>
-                      <i style={{ background: 'var(--visit-1)' }} /><i style={{ background: 'var(--visit-2)' }} /><i style={{ background: 'var(--visit-3)' }} /><i style={{ background: 'var(--visit-4)' }} />
-                      <small className="muted">{lang === 'ko' ? '1 → 5회+' : '1 → 5+ visits'}</small>
-                    </span>
-                    <span><i className="dot wish" />{t.wish}</span>
-                    {data.home ? (
-                      <span><i className="dot home" />{lang === 'ko' ? '출생 국가' : 'Home'}</span>
-                    ) : (
-                      <button className="link-btn" onClick={() => setModal({ kind: 'settings' })}>🏠 {lang === 'ko' ? '출생 국가 설정' : 'Set home country'}</button>
-                    )}
-                  </>
+                <span className="steps-legend" title={lang === 'ko' ? '방문 횟수' : 'Visits'}>
+                  <i style={{ background: 'var(--visit-1)' }} /><i style={{ background: 'var(--visit-2)' }} /><i style={{ background: 'var(--visit-3)' }} /><i style={{ background: 'var(--visit-4)' }} />
+                  <small className="muted">{lang === 'ko' ? '1 → 5회+' : '1 → 5+ visits'}</small>
+                </span>
+                <span>
+                  <i className="dot city" />
+                  {lang === 'ko' ? `간 도시 ${cityCount}곳` : `${cityCount} cities`}
+                  {geoBusy && <small className="muted"> · {lang === 'ko' ? '위치 찾는 중…' : 'locating…'}</small>}
+                </span>
+                <span><i className="dot wish" />{t.wish}</span>
+                {data.home ? (
+                  <span><i className="dot home" />{lang === 'ko' ? '출생 국가' : 'Home'}</span>
                 ) : (
-                  <span>
-                    <i className="dot city" />
-                    {lang === 'ko' ? `간 도시 ${cityCount}곳` : `${cityCount} cities`}
-                    {geoBusy && <small className="muted"> · {lang === 'ko' ? '위치 찾는 중…' : 'locating…'}</small>}
-                  </span>
+                  <button className="link-btn" onClick={() => setModal({ kind: 'settings' })}>🏠 {lang === 'ko' ? '출생 국가 설정' : 'Set home country'}</button>
                 )}
-                {travelView === 'city' && noCityTrips.length > 0 && (
+                {noCityTrips.length > 0 && (
                   <button className="no-city" onClick={() => setModal({ kind: 'form', trip: noCityTrips[0] })}>
                     ⚠️ {lang === 'ko' ? `도시 정보 없는 여행 ${noCityTrips.length}개 — 눌러서 도시 추가` : `${noCityTrips.length} trips without a city — tap to add`}
                   </button>

@@ -3,7 +3,7 @@ import { useI18n } from '../i18n'
 import type { AppData } from '../store'
 import { computeStats, visitCounts, visitLevel } from '../stats'
 import Sheet from './Sheet'
-import { COUNTRY_PATHS, MAP_H, MAP_W } from './WorldMap'
+import { COUNTRY_PATHS, MAP_H, MAP_W, projection } from './WorldMap'
 
 const W = 1080
 const H = 1350
@@ -46,6 +46,19 @@ async function renderImage(data: AppData, lang: string, title: string, ofWorld: 
     ctx.fill(path)
     ctx.stroke(path)
   }
+  // 간 도시 점
+  for (const t of data.trips)
+    for (const pl of t.places ?? []) {
+      const pt = projection([pl.lon, pl.lat])
+      if (!pt) continue
+      ctx.beginPath()
+      ctx.arc(pt[0], pt[1], 3.2 / scale, 0, Math.PI * 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+      ctx.lineWidth = 1.4 / scale
+      ctx.strokeStyle = '#0f2a3f'
+      ctx.stroke()
+    }
   ctx.restore()
 
   // 숫자
@@ -71,6 +84,7 @@ async function renderImage(data: AppData, lang: string, title: string, ofWorld: 
     ['#ffb547', lang === 'ko' ? '가 봤어요' : 'Been there'],
     ['#5fd3c4', lang === 'ko' ? '가고 싶어요' : 'Want to go'],
     ...(data.home ? [['#b197fc', lang === 'ko' ? '출생 국가' : 'Home'] as [string, string]] : []),
+    ...(data.trips.some((t) => t.places?.length) ? [['#ffffff', lang === 'ko' ? '간 도시' : 'Cities'] as [string, string]] : []),
   ]
   let lx = 72
   ctx.font = font(500, 30)

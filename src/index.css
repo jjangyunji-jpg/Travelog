@@ -459,11 +459,12 @@ h2, h3 { margin: 0; }
 .ble.no { color: var(--muted); }
 
 /* ---------- 방문 횟수 색 단계 · 도시 보기 ---------- */
-:root { --visit-1: #fdd88a; --visit-2: #f5a524; --visit-3: #e8730c; --visit-4: #b8460b; --wish-soft: #bfe9e3; --city: #e5590c; }
+:root { --visit-1: #fdd88a; --visit-2: #f5a524; --visit-3: #e8730c; --visit-4: #b8460b; --wish-soft: #bfe9e3; --city: #1b2f57; }
 @media (prefers-color-scheme: dark) {
-  :root { --visit-1: #7a5a22; --visit-2: #b8791a; --visit-3: #e0811a; --visit-4: #ffa94d; --wish-soft: #24504b; --city: #ff8a3d; }
+  :root { --visit-1: #7a5a22; --visit-2: #b8791a; --visit-3: #e0811a; --visit-4: #ffa94d; --wish-soft: #24504b; --city: #f1f5ff; }
 }
-.pin.city .pin-dot { fill: var(--city); stroke: #fff; stroke-width: 1.5; }
+.pin.city .pin-dot { fill: var(--city); stroke: #fff; stroke-width: 1.8; }
+@media (prefers-color-scheme: dark) { .pin.city .pin-dot { stroke: #1b2f57; } }
 .view-switch { display: inline-flex; background: var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
 .view-switch button { border: 0; background: transparent; border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .view-switch button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
@@ -522,3 +523,12 @@ h2, h3 { margin: 0; }
 .now-banner > span:first-child { font-size: 26px; }
 .now-text { display: flex; flex-direction: column; gap: 2px; }
 .now-text small { opacity: .9; }
+
+/* ---------- 지도 검색 ---------- */
+.map-search { position: relative; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 10px 0 12px; }
+.map-search:focus-within { outline: 2px solid var(--primary); }
+.map-search input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; font-size: 16px; outline: none; }
+.ms-icon { font-size: 16px; }
+.ms-clear { border: 0; background: var(--line); width: 22px; height: 22px; border-radius: 50%; font-size: 11px; color: var(--muted); }
+.map-search .cs-list { z-index: 6; }
+.map-search .cs-list button small { margin-left: auto; }
