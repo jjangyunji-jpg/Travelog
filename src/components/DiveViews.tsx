@@ -6,9 +6,11 @@ import { speciesView } from '../speciesInfo'
 import type { CustomSpecies } from '../store'
 import { useI18n } from '../i18n'
 import type { AppData, Dive } from '../store'
-import { diveStats, fmtMinutes, sortDivesDesc, spotMap } from '../dive'
+import { diveStats, fmtMinutes, isPlanned, sortDivesDesc, spotMap } from '../dive'
 import Sheet from './Sheet'
 import ProfileChart from './ProfileChart'
+import { planDive } from '../divelog/plan'
+import { BRIEF_TOTAL } from '../divelog/briefing'
 import { Thumb } from './TripCard'
 
 const moodEmoji = (m: number) => MOODS.find((x) => x[0] === m)?.[1] ?? ''
@@ -53,10 +55,17 @@ export function DiveCard({ dive, no, spot, onClick, showCountry = true, custom =
   const { lang, t, spotName, cName } = useI18n()
   return (
     <button className="dive-card" onClick={onClick}>
-      <div className="dive-no">
-        <small>No.</small>
-        <b>{no}</b>
-      </div>
+      {isPlanned(dive) ? (
+        <div className="dive-no planned">
+          <small>{lang === 'ko' ? '예정' : 'Plan'}</small>
+          <b>📋</b>
+        </div>
+      ) : (
+        <div className="dive-no">
+          <small>No.</small>
+          <b>{no}</b>
+        </div>
+      )}
       <div className="dive-main">
         <div className="dive-spot">
           {spotName(spot) || t.unknownSpot} {dive.mood ? moodEmoji(dive.mood) : ''}
@@ -65,6 +74,12 @@ export function DiveCard({ dive, no, spot, onClick, showCountry = true, custom =
           {showCountry && <>{flagEmoji(dive.country)} {cName(COUNTRY_BY_CODE[dive.country])} · </>}
           {fmtDate(dive.date, lang)}
         </div>
+        {isPlanned(dive) && dive.plan && (
+          <div className="dive-metrics planned-line">
+            <span>{lang === 'ko' ? '계획' : 'Plan'} ⬇ {dive.plan.depth}m · ⏱ {dive.plan.time}{lang === 'ko' ? '분' : 'min'}</span>
+            <b>{lang === 'ko' ? '다이빙 후 눌러서 ③ 디브리프 ›' : 'Tap after the dive to debrief ›'}</b>
+          </div>
+        )}
         <div className="dive-metrics">
           {dive.maxDepth != null && <span>⬇ {dive.maxDepth}m</span>}
           {dive.bottomTime != null && <span>⏱ {dive.bottomTime}{lang === 'ko' ? '분' : 'min'}</span>}
@@ -107,7 +122,7 @@ export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
     [t.shop, dive.shop || undefined],
   ]
   return (
-    <Sheet onClose={onClose} title={<>🤿 No. {no}</>}>
+    <Sheet onClose={onClose} title={isPlanned(dive) ? <>📋 {pick('다이빙 예정', 'Upcoming dive')}</> : <>🤿 No. {no}</>}>
       <div className="trip-detail">
         <h2>{spotName(spot) || t.unknownSpot}</h2>
         <div className="muted">
@@ -124,12 +139,29 @@ export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
             )}
           </div>
         )}
-        {dive.profile && dive.profile.length > 1 && <ProfileChart profile={dive.profile} />}
+        {(dive.profile?.length || dive.plan) && (
+          <ProfileChart
+            title={dive.profile?.length ? undefined : pick('다이빙 계획', 'Dive plan')}
+            series={[
+              ...(dive.plan ? [{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).points, kind: 'plan' as const }] : []),
+              ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : []),
+            ]}
+          />
+        )}
         <div className="log-grid">
           {rows.filter((r) => r[1]).map(([k, v]) => (
             <div key={k}><span>{k}</span><b>{v}</b></div>
           ))}
         </div>
+        {dive.plan && (
+          <div className="plan-line">
+            📋 {pick('계획', 'Plan')} {dive.plan.depth}m · {dive.plan.time}{pick('분', 'min')}
+            {dive.plan.turnBar ? ` · ${pick('상승 시작', 'turn')} ${dive.plan.turnBar} bar` : ''}
+            {dive.plan.briefing && (
+              <b> · {dive.plan.briefing.length === BRIEF_TOTAL ? pick('브리핑 완료 ✓', 'Briefed ✓') : `${pick('브리핑', 'Briefing')} ${dive.plan.briefing.length}/${BRIEF_TOTAL}`}</b>
+            )}
+          </div>
+        )}
         {dive.marineLife.length > 0 && (
           <>
             <h4 className="form-section">🐠 {t.marineLife}</h4>
@@ -141,10 +173,18 @@ export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
             {dive.photoIds.map((p) => <Thumb key={p} id={p} className="detail-photo" />)}
           </div>
         )}
+        {dive.debrief && (dive.debrief.good || dive.debrief.improve || dive.debrief.next) && (
+          <div className="debrief-view">
+            <h4 className="form-section">🗣️ {pick('디브리프 회고', 'Debrief')}</h4>
+            {dive.debrief.good && <p><b>👍 {pick('잘된 점', 'Went well')}</b> {dive.debrief.good}</p>}
+            {dive.debrief.improve && <p><b>🔧 {pick('아쉬운 점', 'To improve')}</b> {dive.debrief.improve}</p>}
+            {dive.debrief.next && <p><b>➡️ {pick('다음 다이빙에', 'Next time')}</b> {dive.debrief.next}</p>}
+          </div>
+        )}
         {dive.note && <p className="detail-note">{dive.note}</p>}
         <div className="form-actions">
           <span className="spacer" />
-          <button className="btn primary" onClick={onEdit}>{t.editDive}</button>
+          <button className="btn primary" onClick={onEdit}>{isPlanned(dive) ? `③ ${pick('디브리프 시작', 'Start debrief')}` : t.editDive}</button>
         </div>
       </div>
     </Sheet>
@@ -166,12 +206,13 @@ export function DiveStatsRow({ data }: { data: AppData }) {
   )
 }
 
-export function DiveLogView({ data, numbers, onOpen, onAdd, onImport }: {
+export function DiveLogView({ data, numbers, onOpen, onAdd, onImport, onPlan }: {
   data: AppData
   numbers: Record<string, number>
   onOpen: (d: Dive) => void
   onAdd: () => void
   onImport: () => void
+  onPlan: () => void
 }) {
   const { t, pick } = useI18n()
   const spots = spotMap(data)
@@ -183,7 +224,10 @@ export function DiveLogView({ data, numbers, onOpen, onAdd, onImport }: {
         <button className="btn primary small" onClick={onAdd}>＋ {t.addDive}</button>
       </div>
       <DiveStatsRow data={data} />
-      <button className="import-link" onClick={onImport}>⌚ {pick('다이빙 컴퓨터 기록 불러오기', 'Import from dive computer')} <span className="muted">›</span></button>
+      <div className="log-actions">
+        <button className="import-link" onClick={onPlan}>📋 {pick('다이빙 계획', 'Plan a dive')} <span className="muted">›</span></button>
+        <button className="import-link" onClick={onImport}>⌚ {pick('컴퓨터 기록 불러오기', 'Import from computer')} <span className="muted">›</span></button>
+      </div>
       {dives.length === 0 && (
         <div className="empty">
           <div className="empty-emoji">🤿</div>
@@ -216,14 +260,15 @@ function SpotRow({ spot, count, onClick }: { spot: DiveSpot; count: number; onCl
   )
 }
 
-export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onClose }: {
+export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onPlan, onClose }: {
   code: string
   data: AppData
   onOpenSpot: (id: string) => void
   onAddDive: () => void
+  onPlan: () => void
   onClose: () => void
 }) {
-  const { t, cName, spotName } = useI18n()
+  const { t, cName, spotName, pick } = useI18n()
   const spots = Object.values(spotMap(data)).filter((s) => s.country === code)
   const counts: Record<string, number> = {}
   for (const d of data.dives) if (d.country === code) counts[d.spotId] = (counts[d.spotId] ?? 0) + 1
@@ -243,7 +288,10 @@ export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onClose }:
         </div>
       }
     >
-      <button className="btn primary" onClick={onAddDive}>＋ {t.addDive}</button>
+      <div className="row">
+        <button className="btn ghost" onClick={onPlan}>📋 {pick('계획', 'Plan')}</button>
+        <button className="btn primary grow" onClick={onAddDive}>＋ {t.addDive}</button>
+      </div>
       {mine.length > 0 && (
         <section>
           <h3 className="sub">{t.mySpots}</h3>
@@ -260,12 +308,13 @@ export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onClose }:
   )
 }
 
-export function SpotSheet({ spot, data, numbers, onOpenDive, onAddDive, onBack, onClose }: {
+export function SpotSheet({ spot, data, numbers, onOpenDive, onAddDive, onPlan, onBack, onClose }: {
   spot: DiveSpot
   data: AppData
   numbers: Record<string, number>
   onOpenDive: (d: Dive) => void
   onAddDive: () => void
+  onPlan: () => void
   onBack: () => void
   onClose: () => void
 }) {
@@ -289,7 +338,10 @@ export function SpotSheet({ spot, data, numbers, onOpenDive, onAddDive, onBack, 
         </div>
       </div>
       {spot.highlights.length > 0 && <div className="chips">{spot.highlights.map((h) => <MarineChip key={h} k={h} />)}</div>}
-      <button className="btn primary" onClick={onAddDive}>{t.diveHere}</button>
+      <div className="row">
+        <button className="btn ghost" onClick={onPlan}>📋 {pick('다이빙 계획', 'Plan')}</button>
+        <button className="btn primary grow" onClick={onAddDive}>{t.diveHere}</button>
+      </div>
       <h3 className="sub">{t.divesHere} <span className="muted">{dives.length}</span></h3>
       <div className="trip-list">
         {dives.map((d) => <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spot} showCountry={false} custom={data.customSpecies} onClick={() => onOpenDive(d)} />)}

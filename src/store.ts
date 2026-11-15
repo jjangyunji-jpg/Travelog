@@ -42,6 +42,10 @@ export interface Dive {
   marineLife: string[]
   /** 다이빙 컴퓨터에서 불러온 수심 그래프 [초, 수심 m] */
   profile?: [number, number][]
+  /** 다이빙 전에 세운 계획 */
+  plan?: { depth: number; time: number; gas: string; turnBar?: number; briefing?: string[] }
+  /** 다이빙 후 디브리프 회고 */
+  debrief?: { good?: string; improve?: string; next?: string }
   /** 불러온 다이빙 컴퓨터 모델 */
   computer?: string
   /** 생물별로 본 양 */
@@ -176,9 +180,11 @@ export function useAppData() {
   const importDives = useCallback((dives: Dive[], spots: DiveSpot[]) => {
     setData((d) => {
       const now = Date.now()
+      const incoming = new Map(dives.map((x) => [x.id, { ...x, updatedAt: now }]))
       let next: AppData = {
         ...d,
-        dives: [...d.dives, ...dives.map((x) => ({ ...x, updatedAt: now }))],
+        // 같은 id(계획만 세워 둔 기록)는 갱신, 나머지는 추가
+        dives: [...d.dives.map((x) => incoming.get(x.id) ?? x), ...[...incoming.values()].filter((x) => !d.dives.some((y) => y.id === x.id))],
         customSpots: [...d.customSpots, ...spots.map((s) => ({ ...s, updatedAt: now }))],
       }
       for (const c of new Set(dives.map((x) => x.country))) next = markVisited(next, c, now)

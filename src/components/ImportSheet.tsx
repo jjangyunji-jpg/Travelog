@@ -13,6 +13,8 @@ interface Row {
   d: ImportedDive
   on: boolean
   dup: boolean
+  /** 같은 날 계획만 세워 둔 기록 → 여기에 채움 */
+  planned?: Dive
   country: string
   spot?: DiveSpot
 }
@@ -41,7 +43,16 @@ export default function ImportSheet({ data, onImport, onClose }: {
           const geoCountry = d.lat != null && d.lon != null ? countryAt(d.lat, d.lon) : undefined
           const spot = matchSpot(d, spots, geoCountry)
           const dup = !!findDuplicate(d, data.dives)
-          return { d, on: !dup, dup, country: spot?.country ?? geoCountry ?? '', spot }
+          const planned = dup ? undefined : data.dives.find((x) => x.date === d.date && x.maxDepth == null && !x.profile?.length)
+          const plannedSpot = planned ? spots.find((s) => s.id === planned.spotId) : undefined
+          return {
+            d,
+            on: !dup,
+            dup,
+            planned,
+            country: planned?.country ?? spot?.country ?? geoCountry ?? '',
+            spot: plannedSpot ?? spot,
+          }
         }),
       )
     } catch (e) {
@@ -75,8 +86,10 @@ export default function ImportSheet({ data, onImport, onClose }: {
           })()
       }
       const d = r.d
+      const base = r.planned
       return {
-        id: uid(),
+        ...(base ?? {}),
+        id: base?.id ?? uid(),
         country: r.country,
         spotId: spot.id,
         date: d.date,
@@ -89,19 +102,19 @@ export default function ImportSheet({ data, onImport, onClose }: {
         endBar: d.endBar,
         weight: d.weight,
         gas: d.gas,
-        suit: '',
-        entry: '',
-        current: '',
-        buddy: d.buddy ?? '',
-        shop: d.shop ?? '',
-        marineLife: [],
-        mood: 0,
-        conditions: [],
-        note: d.note ?? '',
-        photoIds: [],
+        suit: base?.suit ?? '',
+        entry: base?.entry ?? '',
+        current: base?.current ?? '',
+        buddy: base?.buddy || d.buddy || '',
+        shop: base?.shop || d.shop || '',
+        marineLife: base?.marineLife ?? [],
+        mood: base?.mood ?? 0,
+        conditions: base?.conditions ?? [],
+        note: [base?.note, d.note].filter(Boolean).join('\n'),
+        photoIds: base?.photoIds ?? [],
         profile: d.profile,
         computer: d.computer,
-        createdAt: Date.now(),
+        createdAt: base?.createdAt ?? Date.now(),
       }
     })
     onImport(dives, newSpots)
@@ -136,6 +149,7 @@ export default function ImportSheet({ data, onImport, onClose }: {
                     <div className="import-title">
                       {r.d.date} {r.d.time}
                       {r.dup && <span className="dup-badge">{pick('이미 있음', 'Exists')}</span>}
+                      {r.planned && <span className="dup-badge plan">📋 {pick('계획에 채움', 'Fills plan')}</span>}
                     </div>
                     <div className="muted small">
                       {r.spot ? `📍 ${spotName(r.spot)}` : r.d.siteName ? `📍 ${r.d.siteName} (${pick('새 스팟', 'new')})` : `📍 ${pick('스팟 이름 없음', 'No site name')}`}

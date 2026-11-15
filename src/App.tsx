@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { I18nContext, useI18n, type Lang } from './i18n'
-import { exportBackup, importBackup, useAppData, type Dive, type Trip } from './store'
+import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } from './store'
 import { computeStats } from './stats'
 import { diveNumbers, sortDivesDesc, spotMap } from './dive'
 import WorldMap, { type MapMarker, type MapMode } from './components/WorldMap'
@@ -16,6 +16,10 @@ import DiveForm from './components/DiveForm'
 import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, SpotSheet } from './components/DiveViews'
 import Sheet from './components/Sheet'
 import ImportSheet from './components/ImportSheet'
+import PlanSheet, { type Plan } from './components/PlanSheet'
+import { SPECIES } from './data/species'
+import speciesPhotos from './data/speciesPhotos.json'
+import { prefetchImages } from './inat'
 import { useSync } from './sync/useSync'
 import { getClientId, setClientId } from './sync/drive'
 
@@ -26,10 +30,11 @@ type Modal =
   | { kind: 'trip'; trip: Trip; back?: string }
   | { kind: 'diveCountry'; code: string }
   | { kind: 'spot'; id: string }
-  | { kind: 'diveForm'; dive?: Dive; country?: string; spotId?: string; back?: Modal }
+  | { kind: 'diveForm'; dive?: Dive; country?: string; spotId?: string; plan?: Plan; back?: Modal }
   | { kind: 'dive'; dive: Dive; back?: Modal }
   | { kind: 'share' }
   | { kind: 'import' }
+  | { kind: 'plan'; spotId?: string; country?: string; back?: Modal }
   | { kind: 'settings' }
   | null
 
@@ -139,6 +144,17 @@ function Main() {
 
   const recentDives = sortDivesDesc(data.dives).slice(0, 3)
 
+  // 생물 도감 사진을 모두 기기에 저장 (작은 사진 + 썸네일)
+  const photoUrls = useMemo(
+    () => Object.values(speciesPhotos as Record<string, { u: string }>).flatMap((p) => [p.u.replace('{s}', 'small'), p.u.replace('{s}', 'square')]),
+    [],
+  )
+  const [photoProgress, setPhotoProgress] = useState<number | null>(null)
+  const downloadPhotos = () => {
+    setPhotoProgress(0)
+    prefetchImages(photoUrls, setPhotoProgress)
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -239,7 +255,7 @@ function Main() {
           <JournalView trips={data.trips} onOpen={(trip) => setModal({ kind: 'trip', trip })} onAdd={() => setModal({ kind: 'form' })} />
         )}
         {tab === 'dive' && (
-          <DiveLogView data={data} numbers={numbers} onOpen={(d) => setModal({ kind: 'dive', dive: d })} onAdd={() => setModal({ kind: 'diveForm' })} onImport={() => setModal({ kind: 'import' })} />
+          <DiveLogView data={data} numbers={numbers} onOpen={(d) => setModal({ kind: 'dive', dive: d })} onAdd={() => setModal({ kind: 'diveForm' })} onImport={() => setModal({ kind: 'import' })} onPlan={() => setModal({ kind: 'plan' })} />
         )}
         {tab === 'stats' && <StatsView data={data} onSelect={openCountry} />}
         {tab === 'list' && <CountryListView statuses={data.statuses} onSelect={openCountry} onStatus={setStatus} />}
@@ -305,6 +321,7 @@ function Main() {
           data={data}
           onOpenSpot={openSpot}
           onAddDive={() => setModal({ kind: 'diveForm', country: modal.code, back: modal })}
+          onPlan={() => setModal({ kind: 'plan', country: modal.code, back: modal })}
           onClose={() => setModal(null)}
         />
       )}
@@ -315,6 +332,7 @@ function Main() {
           numbers={numbers}
           onOpenDive={(d) => setModal({ kind: 'dive', dive: d, back: modal })}
           onAddDive={() => setModal({ kind: 'diveForm', country: spots[modal.id].country, spotId: modal.id, back: modal })}
+          onPlan={() => setModal({ kind: 'plan', spotId: modal.id, back: modal })}
           onBack={() => setModal({ kind: 'diveCountry', code: spots[modal.id].country })}
           onClose={() => setModal(null)}
         />
@@ -325,6 +343,7 @@ function Main() {
           initial={modal.dive}
           country={modal.country}
           spotId={modal.spotId}
+          plan={modal.plan}
           onAddSpecies={addSpecies}
           onSave={(dive, newSpot) => {
             saveDive(dive, newSpot)
@@ -348,6 +367,41 @@ function Main() {
         />
       )}
 
+      {modal?.kind === 'plan' && (
+        <PlanSheet
+          data={data}
+          spotId={modal.spotId}
+          country={modal.country}
+          onStart={(spot, country, plan) => {
+            // 브리핑까지 마친 다이빙을 '예정'으로 저장 → 다이빙 후 디브리프
+            const now = new Date()
+            const dive: Dive = {
+              id: uid(),
+              country,
+              spotId: spot?.id ?? '',
+              date: now.toISOString().slice(0, 10),
+              time: now.toTimeString().slice(0, 5),
+              gas: plan.gas,
+              suit: '',
+              entry: '',
+              current: '',
+              buddy: '',
+              shop: '',
+              marineLife: [],
+              mood: 0,
+              conditions: [],
+              note: '',
+              photoIds: [],
+              plan,
+              createdAt: Date.now(),
+            }
+            saveDive(dive)
+            setTab('dive')
+            setModal(null)
+          }}
+          onClose={() => setModal(modal.back ?? null)}
+        />
+      )}
       {modal?.kind === 'import' && (
         <ImportSheet
           data={data}
@@ -411,9 +465,29 @@ function Main() {
               )}
               {!sync.enabled && sync.error && sync.error !== 'no-client-id' && <small className="muted">{t.syncError}: {sync.error}</small>}
             </div>
+            <button className="btn ghost block" onClick={downloadPhotos} disabled={photoProgress != null && photoProgress < photoUrls.length}>
+              📥 {photoProgress == null
+                ? (lang === 'ko' ? `오프라인 준비: 생물 사진 ${SPECIES.length - 1}종 받아두기 (약 3MB)` : `Offline: save ${SPECIES.length - 1} species photos (~3MB)`)
+                : photoProgress < photoUrls.length
+                  ? `${lang === 'ko' ? '받는 중' : 'Saving'} ${photoProgress}/${photoUrls.length}`
+                  : (lang === 'ko' ? '✅ 생물 사진 저장 완료 — 인터넷 없이도 보여요' : '✅ Photos saved for offline')}
+            </button>
             <button className="btn ghost block" onClick={doExport}>⬇︎ {t.backup}</button>
             <button className="btn ghost block" onClick={() => fileRef.current?.click()}>⬆︎ {t.restore}</button>
             <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => doImport(e.target.files?.[0])} />
+            <details className="credits">
+              <summary>{lang === 'ko' ? '📷 생물 사진 출처 (iNaturalist)' : '📷 Species photo credits (iNaturalist)'}</summary>
+              <ul>
+                {SPECIES.filter((sp) => (speciesPhotos as Record<string, { a: string; l: string }>)[sp.key]).map((sp) => {
+                  const ph = (speciesPhotos as Record<string, { a: string; l: string; t: number }>)[sp.key]
+                  return (
+                    <li key={sp.key}>
+                      <b>{lang === 'ko' ? sp.ko : sp.en}</b> — {ph.a.replace(/^\(c\)\s*/, '')} <span className="muted">[{ph.l.toUpperCase()}]</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </details>
             <p className="muted small">
               {lang === 'ko'
                 ? '모든 기록과 사진은 이 기기(브라우저)에만 저장돼요. 기기를 바꾸기 전에 백업을 내보내 주세요.'

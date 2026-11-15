@@ -6,6 +6,10 @@ import { useI18n } from '../i18n'
 import { deletePhoto, savePhoto, uid, type Abundance, type AppData, type CustomSpecies, type Dive } from '../store'
 import { speciesView } from '../speciesInfo'
 import CountrySelect from './CountrySelect'
+import { BRIEF_TOTAL } from '../divelog/briefing'
+import { parseDiveFile } from '../divelog/parse'
+import ProfileChart from './ProfileChart'
+import { planDive } from '../divelog/plan'
 import MarinePicker from './MarinePicker'
 import { allSpots } from '../dive'
 import Sheet from './Sheet'
@@ -17,6 +21,7 @@ interface Props {
   initial?: Dive
   country?: string
   spotId?: string
+  plan?: Dive['plan']
   onSave: (d: Dive, newSpot?: DiveSpot) => void
   onDelete?: (id: string) => void
   onAddSpecies: (list: CustomSpecies[]) => void
@@ -49,7 +54,7 @@ function NumField({ label, unit, value, onChange, step = 1 }: {
   )
 }
 
-export default function DiveForm({ data, initial, country, spotId, onSave, onDelete, onAddSpecies, onClose }: Props) {
+export default function DiveForm({ data, initial, country, spotId, plan, onSave, onDelete, onAddSpecies, onClose }: Props) {
   const { t, cName, spotName, pick } = useI18n()
   const today = new Date().toISOString().slice(0, 10)
   const last = data.dives[data.dives.length - 1]
@@ -60,7 +65,8 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
       spotId: spotId ?? '',
       date: today,
       time: '',
-      gas: 'air',
+      gas: plan?.gas ?? 'air',
+      plan,
       // 직전 다이빙의 장비 설정을 그대로 가져옴
       suit: last?.suit ?? '',
       weight: last?.weight,
@@ -79,6 +85,39 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
   const [newSpot, setNewSpot] = useState({ name: '', lat: '', lon: '' })
   const [picking, setPicking] = useState(false)
   const [pickingLife, setPickingLife] = useState(false)
+  // 계획만 있던 다이빙을 처음 기록하는 경우 = 디브리프
+  const [debriefMode] = useState(() => !!(initial ?? { plan })?.plan && initial?.maxDepth == null && initial?.bottomTime == null)
+  const fillRef = useRef<HTMLInputElement>(null)
+  const [fillMsg, setFillMsg] = useState('')
+  const fillFromFile = async (f?: File) => {
+    if (!f) return
+    try {
+      const list = parseDiveFile(await f.text())
+      const mins = (t: string) => (t ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : 0)
+      const same = list.filter((x) => x.date === dive.date)
+      const pickD = (same.length ? same : list).sort((a, b) => Math.abs(mins(a.time) - mins(dive.time)) - Math.abs(mins(b.time) - mins(dive.time)))[0]
+      if (!pickD) throw new Error('none')
+      setDive((x) => ({
+        ...x,
+        date: pickD.date,
+        time: pickD.time || x.time,
+        maxDepth: pickD.maxDepth,
+        avgDepth: pickD.avgDepth,
+        bottomTime: pickD.bottomTime,
+        waterTemp: pickD.waterTemp,
+        startBar: pickD.startBar,
+        endBar: pickD.endBar,
+        weight: pickD.weight ?? x.weight,
+        gas: pickD.gas,
+        buddy: x.buddy || pickD.buddy || '',
+        profile: pickD.profile,
+        computer: pickD.computer,
+      }))
+      setFillMsg(pick(`✅ ${pickD.date} ${pickD.time} 다이빙 기록으로 채웠어요.`, `✅ Filled from ${pickD.date} ${pickD.time}.`))
+    } catch {
+      setFillMsg(pick('파일에서 다이빙을 찾지 못했어요.', 'No dive found in the file.'))
+    }
+  }
   const [busy, setBusy] = useState(false)
   const added = useRef<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -161,8 +200,27 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
     newSpot.lat && newSpot.lon ? [{ id: 'pick', lat: +newSpot.lat, lon: +newSpot.lon, kind: 'pick' }] : []
 
   return (
-    <Sheet onClose={cancel} title={initial ? t.editDive : `🤿 ${t.addDive}`}>
+    <Sheet onClose={cancel} title={debriefMode ? `③ ${pick('디브리프', 'Debrief')}` : initial ? t.editDive : `🤿 ${t.addDive}`}>
       <form className="trip-form dive-form" onSubmit={submit}>
+        {debriefMode && (
+          <>
+            <div className="steps three">
+              <span className="done">① {pick('계획', 'Plan')} ✓</span>
+              <span className={dive.plan?.briefing?.length ? 'done' : ''}>② {pick('브리핑', 'Briefing')} {dive.plan?.briefing?.length ? '✓' : ''}</span>
+              <span className="on">③ {pick('디브리프', 'Debrief')}</span>
+            </div>
+            <button type="button" className="life-open" onClick={() => fillRef.current?.click()}>
+              <span>⌚</span>
+              <span className="life-open-text">
+                <b>{pick('컴퓨터 기록으로 채우기', 'Fill from dive computer')}</b>
+                <small className="muted">{pick('UDDF·Subsurface 파일에서 같은 날 다이빙을 찾아 수치와 그래프를 채워요', 'Finds this day’s dive in a UDDF/Subsurface file')}</small>
+              </span>
+              <span className="muted">›</span>
+            </button>
+            <input ref={fillRef} type="file" accept=".uddf,.xml,.ssrf" hidden onChange={(e) => fillFromFile(e.target.files?.[0])} />
+            {fillMsg && <p className="muted small">{fillMsg}</p>}
+          </>
+        )}
         {/* 스팟 */}
         <div className="row">
           <label>
@@ -208,6 +266,15 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
           </label>
         </div>
 
+        {dive.plan && (
+          <div className="plan-line">
+            📋 {pick('계획', 'Plan')}: {dive.plan.depth}m · {dive.plan.time}{pick('분', 'min')} · {dive.plan.gas === 'air' ? 'Air' : `EAN${dive.plan.gas.slice(3)}`}
+            {dive.plan.turnBar ? ` · ${pick('상승', 'turn')} ${dive.plan.turnBar} bar` : ''}
+            {dive.plan.briefing && ` · ${pick('브리핑', 'briefing')} ${dive.plan.briefing.length}/${BRIEF_TOTAL}`}
+            <small className="muted"> — {pick('다이빙 후 아래 수치를 채우거나 컴퓨터 기록을 불러오세요', 'Fill in actual values after the dive or import from your computer')}</small>
+          </div>
+        )}
+
         {/* 수치 */}
         <h4 className="form-section">📏 {t.numbers}</h4>
         <div className="num-grid">
@@ -221,6 +288,27 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
           <NumField label={t.endBar} unit="bar" step={10} value={dive.endBar} onChange={(v) => up({ endBar: v })} />
         </div>
         {used != null && <div className="muted small">{t.airUsed}: {used} bar</div>}
+        {dive.plan && (dive.maxDepth != null || dive.bottomTime != null || dive.profile?.length) && (
+          <div className="vs">
+            <b>{pick('계획 vs 실제', 'Plan vs actual')}</b>
+            {dive.maxDepth != null && (
+              <span className={dive.maxDepth > dive.plan.depth + 1 ? 'over' : 'ok'}>
+                ⬇ {dive.plan.depth}m → {dive.maxDepth}m {dive.maxDepth > dive.plan.depth + 1 ? pick('(계획보다 깊음)', '(deeper)') : '✓'}
+              </span>
+            )}
+            {dive.bottomTime != null && (
+              <span className={dive.bottomTime > dive.plan.time + 3 ? 'over' : 'ok'}>
+                ⏱ {dive.plan.time} → {dive.bottomTime}{pick('분', 'min')} {dive.bottomTime > dive.plan.time + 3 ? pick('(계획보다 김)', '(longer)') : '✓'}
+              </span>
+            )}
+            {dive.plan.turnBar != null && dive.endBar != null && (
+              <span className={dive.endBar < 50 ? 'over' : 'ok'}>
+                🫧 {pick('출수 압력', 'Surfaced with')} {dive.endBar} bar {dive.endBar < 50 ? pick('(50 bar 미만)', '(below 50 bar)') : '✓'}
+              </span>
+            )}
+            <ProfileChart series={[{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).points, kind: 'plan' }, ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : [])]} />
+          </div>
+        )}
 
         {/* 장비·환경 */}
         <h4 className="form-section">🧰 {t.gear}</h4>
@@ -321,6 +409,22 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
             <input value={dive.shop} onChange={(e) => up({ shop: e.target.value })} />
           </label>
         </div>
+
+        {(debriefMode || dive.plan || dive.debrief) && (
+          <>
+            <h4 className="form-section">🗣️ {pick('디브리프 회고', 'Debrief')}</h4>
+            {([
+              ['good', pick('잘된 점', 'What went well'), pick('예: 부력 조절이 안정적이었다', 'e.g. Buoyancy was steady')],
+              ['improve', pick('아쉬운 점', 'What to improve'), pick('예: 공기 소모가 빨랐다', 'e.g. Used air too fast')],
+              ['next', pick('다음 다이빙에', 'Next time'), pick('예: 하강 전 호흡 천천히, 웨이트 1kg 줄이기', 'e.g. Drop 1kg of weight')],
+            ] as const).map(([k, label, ph]) => (
+              <label key={k}>
+                <span>{label}</span>
+                <input value={dive.debrief?.[k] ?? ''} placeholder={ph} onChange={(e) => up({ debrief: { ...dive.debrief, [k]: e.target.value } })} />
+              </label>
+            ))}
+          </>
+        )}
 
         <label>
           <span>{t.diveNote}</span>

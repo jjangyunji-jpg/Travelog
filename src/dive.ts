@@ -9,16 +9,19 @@ export function spotMap(data: AppData): Record<string, DiveSpot> {
   return Object.fromEntries(allSpots(data).map((s) => [s.id, s]))
 }
 
-/** 날짜·시간 순으로 정렬해 로그 번호를 매김 */
+/** 계획·브리핑만 하고 아직 디브리프(실제 기록)를 안 한 다이빙 */
+export const isPlanned = (d: Dive) => !!d.plan && d.maxDepth == null && d.bottomTime == null && !d.profile?.length
+
+/** 날짜·시간 순으로 정렬해 로그 번호를 매김 (예정된 다이빙은 제외) */
 export function diveNumbers(data: AppData): Record<string, number> {
-  const sorted = [...data.dives].sort(
+  const sorted = data.dives.filter((d) => !isPlanned(d)).sort(
     (a, b) => (a.date + a.time).localeCompare(b.date + b.time) || a.createdAt - b.createdAt,
   )
   return Object.fromEntries(sorted.map((d, i) => [d.id, data.diveOffset + i + 1]))
 }
 
 export function diveStats(data: AppData) {
-  const dives = data.dives
+  const dives = data.dives.filter((d) => !isPlanned(d))
   const totalMin = dives.reduce((s, d) => s + (d.bottomTime ?? 0), 0)
   const maxDepth = dives.reduce((m, d) => Math.max(m, d.maxDepth ?? 0), 0)
   const countries = new Set(dives.map((d) => d.country)).size
