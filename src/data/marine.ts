@@ -1,48 +1,12 @@
-/** 다이빙에서 쓰는 사전: 해양 생물, 스팟 종류, 컨디션, 감정 */
+/** 다이빙에서 쓰는 사전: 마릿수, 스팟 종류, 컨디션, 감정 (생물 도감은 species.ts) */
 
-export const MARINE: [key: string, emoji: string, ko: string, en: string][] = [
-  ['turtle', '🐢', '거북이', 'Sea turtle'],
-  ['manta', '🛸', '만타가오리', 'Manta ray'],
-  ['eagleRay', '🪁', '이글레이', 'Eagle ray'],
-  ['stingray', '🪁', '가오리', 'Stingray'],
-  ['whaleShark', '🦈', '고래상어', 'Whale shark'],
-  ['reefShark', '🦈', '리프상어', 'Reef shark'],
-  ['hammerhead', '🦈', '귀상어(해머헤드)', 'Hammerhead'],
-  ['thresher', '🦈', '환도상어', 'Thresher shark'],
-  ['tigerShark', '🦈', '뱀상어', 'Tiger shark'],
-  ['greatWhite', '🦈', '백상아리', 'Great white'],
-  ['dolphin', '🐬', '돌고래', 'Dolphin'],
-  ['whale', '🐋', '고래', 'Whale'],
-  ['sealion', '🦭', '바다사자·물개', 'Sea lion / Seal'],
-  ['octopus', '🐙', '문어', 'Octopus'],
-  ['cuttlefish', '🦑', '갑오징어', 'Cuttlefish'],
-  ['squid', '🦑', '오징어', 'Squid'],
-  ['nudibranch', '🐌', '갯민숭달팽이(누디)', 'Nudibranch'],
-  ['seahorse', '🐴', '해마', 'Seahorse'],
-  ['pygmySeahorse', '🐴', '피그미해마', 'Pygmy seahorse'],
-  ['frogfish', '🐸', '씬벵이(프로그피시)', 'Frogfish'],
-  ['moray', '🐍', '곰치', 'Moray eel'],
-  ['clownfish', '🐠', '흰동가리(니모)', 'Clownfish'],
-  ['barracuda', '🐟', '바라쿠다', 'Barracuda'],
-  ['jackfish', '🐟', '잭피시 떼', 'Jackfish school'],
-  ['sardines', '🐟', '정어리 떼', 'Sardine run'],
-  ['batfish', '🐟', '제비활치(배트피시)', 'Batfish'],
-  ['napoleon', '🐟', '나폴레옹피시', 'Napoleon wrasse'],
-  ['bumphead', '🐟', '혹등비늘돔', 'Bumphead parrotfish'],
-  ['lionfish', '🐟', '쏠배감펭', 'Lionfish'],
-  ['scorpionfish', '🐟', '쑤기미·스콜피온피시', 'Scorpionfish'],
-  ['mandarinfish', '🐠', '만다린피시', 'Mandarinfish'],
-  ['ghostPipefish', '🐟', '고스트파이프피시', 'Ghost pipefish'],
-  ['molaMola', '🐟', '개복치', 'Mola mola'],
-  ['pufferfish', '🐡', '복어', 'Pufferfish'],
-  ['crab', '🦀', '게', 'Crab'],
-  ['lobster', '🦞', '랍스터', 'Lobster'],
-  ['shrimp', '🦐', '새우', 'Shrimp'],
-  ['jellyfish', '🎐', '해파리', 'Jellyfish'],
-  ['softCoral', '🌸', '연산호', 'Soft coral'],
-  ['wreck', '⚓', '난파선', 'Wreck'],
+/** 본 양 (대략) */
+export const ABUNDANCE: [key: 'few' | 'some' | 'many' | 'swarm', ko: string, en: string][] = [
+  ['few', '1~5', '1–5'],
+  ['some', '5~20', '5–20'],
+  ['many', '20~100', '20–100'],
+  ['swarm', '100+ 군체', '100+ school'],
 ]
-export const MARINE_BY_KEY = Object.fromEntries(MARINE.map((m) => [m[0], m]))
 
 export const SPOT_TYPES: Record<string, [ko: string, en: string]> = {
   reef: ['리프', 'Reef'],

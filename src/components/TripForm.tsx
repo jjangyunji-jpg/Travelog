@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { COUNTRIES, COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
+import { COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
 import { useI18n } from '../i18n'
 import { deletePhoto, savePhoto, uid, type Trip } from '../store'
 import Sheet from './Sheet'
+import CountrySelect from './CountrySelect'
 import { Thumb } from './TripCard'
 
 interface Props {
@@ -67,16 +68,7 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
       <form className="trip-form" onSubmit={submit}>
         <label>
           <span>{t.country}</span>
-          <select value={trip.country} onChange={(e) => up({ country: e.target.value })} required>
-            <option value="">{t.selectCountry}</option>
-            {[...COUNTRIES]
-              .sort((a, b) => cName(a).localeCompare(cName(b)))
-              .map((c) => (
-                <option key={c.code} value={c.code}>
-                  {flagEmoji(c.code)} {cName(c)}
-                </option>
-              ))}
-          </select>
+          <CountrySelect value={trip.country} onChange={(code) => up({ country: code })} />
         </label>
         <label>
           <span>{t.title}</span>

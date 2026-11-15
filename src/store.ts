@@ -17,6 +17,8 @@ export interface Trip {
   updatedAt?: number
 }
 
+export type Abundance = 'few' | 'some' | 'many' | 'swarm'
+
 export interface Dive {
   id: string
   country: string
@@ -38,12 +40,28 @@ export interface Dive {
   buddy: string
   shop: string
   marineLife: string[]
+  /** 다이빙 컴퓨터에서 불러온 수심 그래프 [초, 수심 m] */
+  profile?: [number, number][]
+  /** 불러온 다이빙 컴퓨터 모델 */
+  computer?: string
+  /** 생물별로 본 양 */
+  lifeCounts?: Record<string, Abundance>
   mood: number
   conditions: string[]
   note: string
   photoIds: string[]
   createdAt: number
   updatedAt?: number
+}
+
+/** iNaturalist에서 찾아 추가한 생물 (도감에 없는 종) */
+export interface CustomSpecies {
+  key: string
+  ko: string
+  en: string
+  sci: string
+  photo?: string
+  attr?: string
 }
 
 export interface AppData {
@@ -59,6 +77,7 @@ export interface AppData {
   /** 삭제 기록 ('trip:id', 'dive:id', 'spot:id', 'status:KR') → 삭제 시각 */
   deleted: Record<string, number>
   diveOffsetTs: number
+  customSpecies: Record<string, CustomSpecies>
 }
 
 const KEY = 'travelog:data:v1'
@@ -71,6 +90,7 @@ export const EMPTY: AppData = {
   statusTs: {},
   deleted: {},
   diveOffsetTs: 0,
+  customSpecies: {},
 }
 
 /** 예전 형식의 데이터도 안전하게 읽기 */
@@ -152,10 +172,32 @@ export function useAppData() {
     })
   }, [])
 
+  /** 다이빙 컴퓨터에서 여러 개를 한 번에 불러오기 */
+  const importDives = useCallback((dives: Dive[], spots: DiveSpot[]) => {
+    setData((d) => {
+      const now = Date.now()
+      let next: AppData = {
+        ...d,
+        dives: [...d.dives, ...dives.map((x) => ({ ...x, updatedAt: now }))],
+        customSpots: [...d.customSpots, ...spots.map((s) => ({ ...s, updatedAt: now }))],
+      }
+      for (const c of new Set(dives.map((x) => x.country))) next = markVisited(next, c, now)
+      return next
+    })
+  }, [])
+
   const deleteDive = useCallback((id: string) => {
     setData((d) => {
       d.dives.find((x) => x.id === id)?.photoIds.forEach((p) => del(photoKey(p)))
       return { ...d, dives: d.dives.filter((x) => x.id !== id), deleted: { ...d.deleted, ['dive:' + id]: Date.now() } }
+    })
+  }, [])
+
+  const addSpecies = useCallback((list: CustomSpecies[]) => {
+    setData((d) => {
+      const missing = list.filter((x) => !d.customSpecies[x.key])
+      if (!missing.length) return d
+      return { ...d, customSpecies: { ...d.customSpecies, ...Object.fromEntries(missing.map((x) => [x.key, x])) } }
     })
   }, [])
 
@@ -166,7 +208,7 @@ export function useAppData() {
 
   const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */

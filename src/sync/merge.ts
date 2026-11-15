@@ -53,6 +53,7 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
     customSpots: mergeList(local.customSpots, remote.customSpots, deleted, 'spot:'),
     diveOffset: remoteNewerOffset ? remote.diveOffset : local.diveOffset,
     diveOffsetTs: Math.max(local.diveOffsetTs, remote.diveOffsetTs),
+    customSpecies: { ...remote.customSpecies, ...local.customSpecies },
   }
 }
 

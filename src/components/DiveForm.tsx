@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
-import { COUNTRIES, COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
+import { COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
 import type { DiveSpot } from '../data/diveSpots'
-import { CONDITIONS, MARINE, MARINE_BY_KEY, MOODS, SUITS } from '../data/marine'
+import { ABUNDANCE, CONDITIONS, MOODS, SUITS } from '../data/marine'
 import { useI18n } from '../i18n'
-import { deletePhoto, savePhoto, uid, type AppData, type Dive } from '../store'
+import { deletePhoto, savePhoto, uid, type Abundance, type AppData, type CustomSpecies, type Dive } from '../store'
+import { speciesView } from '../speciesInfo'
+import CountrySelect from './CountrySelect'
+import MarinePicker from './MarinePicker'
 import { allSpots } from '../dive'
 import Sheet from './Sheet'
 import { Thumb } from './TripCard'
@@ -16,6 +19,7 @@ interface Props {
   spotId?: string
   onSave: (d: Dive, newSpot?: DiveSpot) => void
   onDelete?: (id: string) => void
+  onAddSpecies: (list: CustomSpecies[]) => void
   onClose: () => void
 }
 
@@ -45,7 +49,7 @@ function NumField({ label, unit, value, onChange, step = 1 }: {
   )
 }
 
-export default function DiveForm({ data, initial, country, spotId, onSave, onDelete, onClose }: Props) {
+export default function DiveForm({ data, initial, country, spotId, onSave, onDelete, onAddSpecies, onClose }: Props) {
   const { t, cName, spotName, pick } = useI18n()
   const today = new Date().toISOString().slice(0, 10)
   const last = data.dives[data.dives.length - 1]
@@ -74,7 +78,7 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
   )
   const [newSpot, setNewSpot] = useState({ name: '', lat: '', lon: '' })
   const [picking, setPicking] = useState(false)
-  const [custom, setCustom] = useState('')
+  const [pickingLife, setPickingLife] = useState(false)
   const [busy, setBusy] = useState(false)
   const added = useRef<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -84,15 +88,21 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
     () => allSpots(data).filter((s) => s.country === dive.country).sort((a, b) => spotName(a).localeCompare(spotName(b))),
     [data, dive.country, spotName],
   )
-  const countryOptions = useMemo(() => [...COUNTRIES].sort((a, b) => cName(a).localeCompare(cName(b))), [cName])
 
   const toggle = (list: string[], key: string) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key])
 
-  const addCustom = () => {
-    const v = custom.trim()
-    if (v && !dive.marineLife.includes(v)) up({ marineLife: [...dive.marineLife, v] })
-    setCustom('')
-  }
+  const setLife = (keys: string[]) =>
+    setDive((x) => {
+      const counts = Object.fromEntries(Object.entries(x.lifeCounts ?? {}).filter(([k]) => keys.includes(k)))
+      return { ...x, marineLife: keys, lifeCounts: counts }
+    })
+  const setCount = (key: string, a: Abundance) =>
+    setDive((x) => {
+      const counts = { ...(x.lifeCounts ?? {}) }
+      if (counts[key] === a) delete counts[key]
+      else counts[key] = a
+      return { ...x, lifeCounts: counts }
+    })
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return
@@ -157,12 +167,7 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
         <div className="row">
           <label>
             <span>{t.country}</span>
-            <select value={dive.country} onChange={(e) => up({ country: e.target.value, spotId: '' })} required>
-              <option value="">{t.selectCountry}</option>
-              {countryOptions.map((c) => (
-                <option key={c.code} value={c.code}>{flagEmoji(c.code)} {cName(c)}</option>
-              ))}
-            </select>
+            <CountrySelect value={dive.country} onChange={(code) => up({ country: code, spotId: '' })} />
           </label>
         </div>
         {dive.country && (
@@ -255,31 +260,35 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
 
         {/* 생물 */}
         <h4 className="form-section">🐠 {t.marineLife}</h4>
-        <div className="chips">
-          {MARINE.map(([k, emoji, ko, en]) => (
-            <button type="button" key={k} className={dive.marineLife.includes(k) ? 'chip sel' : 'chip'} onClick={() => up({ marineLife: toggle(dive.marineLife, k) })}>
-              {emoji} {pick(ko, en)}
-            </button>
-          ))}
-          {dive.marineLife.filter((k) => !MARINE_BY_KEY[k]).map((k) => (
-            <button type="button" key={k} className="chip sel" onClick={() => up({ marineLife: toggle(dive.marineLife, k) })}>
-              🐟 {k} ✕
-            </button>
-          ))}
-        </div>
-        <input
-          className="custom-input"
-          value={custom}
-          placeholder={`＋ ${t.addCustom}`}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              addCustom()
-            }
-          }}
-          onBlur={addCustom}
-        />
+        <button type="button" className="life-open" onClick={() => setPickingLife(true)}>
+          <span>📷</span>
+          <span className="life-open-text">
+            <b>{dive.marineLife.length ? pick('생물 더 고르기', 'Add more') : pick('사진 보고 고르기', 'Pick from photos')}</b>
+            <small className="muted">{pick('이 스팟에서 볼 수 있는 생물부터 보여줘요', 'Species seen at this site first')}</small>
+          </span>
+          <span className="muted">›</span>
+        </button>
+        {dive.marineLife.length > 0 && (
+          <ul className="life-list">
+            {dive.marineLife.map((k) => {
+              const v = speciesView(k, data.customSpecies)
+              return (
+                <li key={k}>
+                  {v.photo ? <img src={v.photo('square')} alt="" /> : <span className="life-emoji">{v.emoji}</span>}
+                  <div className="life-main">
+                    <div className="life-name">{pick(v.ko, v.en)}</div>
+                    <div className="abund">
+                      {ABUNDANCE.map(([a, ko, en]) => (
+                        <button type="button" key={a} className={dive.lifeCounts?.[k] === a ? 'on' : ''} onClick={() => setCount(k, a)}>{pick(ko, en)}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <button type="button" className="icon-btn" aria-label="remove" onClick={() => setLife(dive.marineLife.filter((x) => x !== k))}>✕</button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         {/* 감정·상태 */}
         <h4 className="form-section">💭 {t.mood}</h4>
@@ -345,6 +354,17 @@ export default function DiveForm({ data, initial, country, spotId, onSave, onDel
         </div>
       </form>
 
+      {pickingLife && (
+        <MarinePicker
+          selected={dive.marineLife}
+          spot={allSpots(data).find((s) => s.id === dive.spotId)}
+          country={dive.country}
+          customSpecies={data.customSpecies}
+          onChange={setLife}
+          onAddSpecies={onAddSpecies}
+          onClose={() => setPickingLife(false)}
+        />
+      )}
       {picking && (
         <div className="picker-overlay">
           <div className="picker-head">

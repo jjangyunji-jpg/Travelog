@@ -1,30 +1,54 @@
 import { COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
 import type { DiveSpot } from '../data/diveSpots'
-import { CONDITIONS, MARINE_BY_KEY, MOODS, SPOT_TYPES, SUITS } from '../data/marine'
+import { ABUNDANCE, CONDITIONS, MOODS, SPOT_TYPES, SUITS } from '../data/marine'
+import { SPECIES_BY_KEY } from '../data/species'
+import { speciesView } from '../speciesInfo'
+import type { CustomSpecies } from '../store'
 import { useI18n } from '../i18n'
 import type { AppData, Dive } from '../store'
 import { diveStats, fmtMinutes, sortDivesDesc, spotMap } from '../dive'
 import Sheet from './Sheet'
+import ProfileChart from './ProfileChart'
 import { Thumb } from './TripCard'
 
 const moodEmoji = (m: number) => MOODS.find((x) => x[0] === m)?.[1] ?? ''
 
-export function MarineChip({ k }: { k: string }) {
+export function MarineChip({ k, custom, count }: { k: string; custom?: Record<string, CustomSpecies>; count?: string }) {
   const { pick } = useI18n()
-  const m = MARINE_BY_KEY[k]
-  return <span className="chip static">{m ? `${m[1]} ${pick(m[2], m[3])}` : `🐟 ${k}`}</span>
+  const v = speciesView(k, custom)
+  const a = ABUNDANCE.find((x) => x[0] === count)
+  return (
+    <span className="chip static life-chip">
+      {v.photo ? <img src={v.photo('square')} alt="" /> : <span>{v.emoji}</span>}
+      {pick(v.ko, v.en)}
+      {a && <b className="abund-tag">{pick(a[1], a[2])}</b>}
+    </span>
+  )
+}
+
+function LifeThumbs({ keys, custom }: { keys: string[]; custom: Record<string, CustomSpecies> }) {
+  return (
+    <div className="life-thumbs">
+      {keys.slice(0, 6).map((k) => {
+        const v = speciesView(k, custom)
+        return v.photo ? <img key={k} src={v.photo('square')} alt="" title={v.ko} /> : <span key={k}>{v.emoji}</span>
+      })}
+      {keys.length > 6 && <small className="muted">+{keys.length - 6}</small>}
+    </div>
+  )
 }
 
 function fmtDate(d: string, lang: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function DiveCard({ dive, no, spot, onClick, showCountry = true }: {
+export function DiveCard({ dive, no, spot, onClick, showCountry = true, custom = {} }: {
   dive: Dive
   no: number
   spot?: DiveSpot
   onClick: () => void
   showCountry?: boolean
+  custom?: Record<string, CustomSpecies>
 }) {
   const { lang, t, spotName, cName } = useI18n()
   return (
@@ -47,22 +71,18 @@ export function DiveCard({ dive, no, spot, onClick, showCountry = true }: {
           {dive.waterTemp != null && <span>🌡 {dive.waterTemp}°</span>}
           {dive.visibility != null && <span>👁 {dive.visibility}m</span>}
         </div>
-        {dive.marineLife.length > 0 && (
-          <div className="dive-life">
-            {dive.marineLife.slice(0, 6).map((k) => MARINE_BY_KEY[k]?.[1] ?? '🐟').join(' ')}
-            {dive.marineLife.length > 6 && ` +${dive.marineLife.length - 6}`}
-          </div>
-        )}
+        {dive.marineLife.length > 0 && <LifeThumbs keys={dive.marineLife} custom={custom} />}
       </div>
       {dive.photoIds[0] && <Thumb id={dive.photoIds[0]} className="dive-thumb" />}
     </button>
   )
 }
 
-export function DiveDetail({ dive, no, spot, onEdit, onClose }: {
+export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
   dive: Dive
   no: number
   spot?: DiveSpot
+  custom?: Record<string, CustomSpecies>
   onEdit: () => void
   onClose: () => void
 }) {
@@ -83,6 +103,7 @@ export function DiveDetail({ dive, no, spot, onEdit, onClose }: {
     [t.current, dive.current ? { none: t.curNone, weak: t.curWeak, medium: t.curMedium, strong: t.curStrong }[dive.current] : undefined],
     [t.time, dive.time || undefined],
     [t.buddy, dive.buddy || undefined],
+    [pick('다이빙 컴퓨터', 'Dive computer'), dive.computer || undefined],
     [t.shop, dive.shop || undefined],
   ]
   return (
@@ -103,6 +124,7 @@ export function DiveDetail({ dive, no, spot, onEdit, onClose }: {
             )}
           </div>
         )}
+        {dive.profile && dive.profile.length > 1 && <ProfileChart profile={dive.profile} />}
         <div className="log-grid">
           {rows.filter((r) => r[1]).map(([k, v]) => (
             <div key={k}><span>{k}</span><b>{v}</b></div>
@@ -111,7 +133,7 @@ export function DiveDetail({ dive, no, spot, onEdit, onClose }: {
         {dive.marineLife.length > 0 && (
           <>
             <h4 className="form-section">🐠 {t.marineLife}</h4>
-            <div className="chips">{dive.marineLife.map((k) => <MarineChip key={k} k={k} />)}</div>
+            <div className="chips">{dive.marineLife.map((k) => <MarineChip key={k} k={k} custom={custom} count={dive.lifeCounts?.[k]} />)}</div>
           </>
         )}
         {dive.photoIds.length > 0 && (
@@ -144,13 +166,14 @@ export function DiveStatsRow({ data }: { data: AppData }) {
   )
 }
 
-export function DiveLogView({ data, numbers, onOpen, onAdd }: {
+export function DiveLogView({ data, numbers, onOpen, onAdd, onImport }: {
   data: AppData
   numbers: Record<string, number>
   onOpen: (d: Dive) => void
   onAdd: () => void
+  onImport: () => void
 }) {
-  const { t } = useI18n()
+  const { t, pick } = useI18n()
   const spots = spotMap(data)
   const dives = sortDivesDesc(data.dives)
   return (
@@ -160,6 +183,7 @@ export function DiveLogView({ data, numbers, onOpen, onAdd }: {
         <button className="btn primary small" onClick={onAdd}>＋ {t.addDive}</button>
       </div>
       <DiveStatsRow data={data} />
+      <button className="import-link" onClick={onImport}>⌚ {pick('다이빙 컴퓨터 기록 불러오기', 'Import from dive computer')} <span className="muted">›</span></button>
       {dives.length === 0 && (
         <div className="empty">
           <div className="empty-emoji">🤿</div>
@@ -168,7 +192,7 @@ export function DiveLogView({ data, numbers, onOpen, onAdd }: {
         </div>
       )}
       <div className="trip-list">
-        {dives.map((d) => <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spots[d.spotId]} onClick={() => onOpen(d)} />)}
+        {dives.map((d) => <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spots[d.spotId]} custom={data.customSpecies} onClick={() => onOpen(d)} />)}
       </div>
     </div>
   )
@@ -184,7 +208,7 @@ function SpotRow({ spot, count, onClick }: { spot: DiveSpot; count: number; onCl
         <div className="spot-name">{spot.custom ? '⭐ ' : ''}{spotName(spot)}</div>
         <div className="muted small">
           {type && pick(type[0], type[1])}
-          {spot.highlights.length > 0 && ' · ' + spot.highlights.map((h) => MARINE_BY_KEY[h]?.[1] ?? '').join(' ')}
+          {spot.highlights.length > 0 && ' · ' + spot.highlights.map((h) => SPECIES_BY_KEY[h]?.emoji ?? '').join(' ')}
         </div>
       </div>
       {count > 0 && <span className="count-badge">{count}{pick(t.times, '')}</span>}
@@ -268,7 +292,7 @@ export function SpotSheet({ spot, data, numbers, onOpenDive, onAddDive, onBack, 
       <button className="btn primary" onClick={onAddDive}>{t.diveHere}</button>
       <h3 className="sub">{t.divesHere} <span className="muted">{dives.length}</span></h3>
       <div className="trip-list">
-        {dives.map((d) => <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spot} showCountry={false} onClick={() => onOpenDive(d)} />)}
+        {dives.map((d) => <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spot} showCountry={false} custom={data.customSpecies} onClick={() => onOpenDive(d)} />)}
       </div>
     </Sheet>
   )

@@ -15,6 +15,7 @@ import TripCard from './components/TripCard'
 import DiveForm from './components/DiveForm'
 import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, SpotSheet } from './components/DiveViews'
 import Sheet from './components/Sheet'
+import ImportSheet from './components/ImportSheet'
 import { useSync } from './sync/useSync'
 import { getClientId, setClientId } from './sync/drive'
 
@@ -28,6 +29,7 @@ type Modal =
   | { kind: 'diveForm'; dive?: Dive; country?: string; spotId?: string; back?: Modal }
   | { kind: 'dive'; dive: Dive; back?: Modal }
   | { kind: 'share' }
+  | { kind: 'import' }
   | { kind: 'settings' }
   | null
 
@@ -66,7 +68,7 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, replaceAll } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
@@ -226,7 +228,7 @@ function Main() {
                 </div>
                 <div className="trip-list">
                   {recentDives.map((d) => (
-                    <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spots[d.spotId]} onClick={() => setModal({ kind: 'dive', dive: d })} />
+                    <DiveCard key={d.id} dive={d} no={numbers[d.id]} spot={spots[d.spotId]} custom={data.customSpecies} onClick={() => setModal({ kind: 'dive', dive: d })} />
                   ))}
                 </div>
               </section>
@@ -237,7 +239,7 @@ function Main() {
           <JournalView trips={data.trips} onOpen={(trip) => setModal({ kind: 'trip', trip })} onAdd={() => setModal({ kind: 'form' })} />
         )}
         {tab === 'dive' && (
-          <DiveLogView data={data} numbers={numbers} onOpen={(d) => setModal({ kind: 'dive', dive: d })} onAdd={() => setModal({ kind: 'diveForm' })} />
+          <DiveLogView data={data} numbers={numbers} onOpen={(d) => setModal({ kind: 'dive', dive: d })} onAdd={() => setModal({ kind: 'diveForm' })} onImport={() => setModal({ kind: 'import' })} />
         )}
         {tab === 'stats' && <StatsView data={data} onSelect={openCountry} />}
         {tab === 'list' && <CountryListView statuses={data.statuses} onSelect={openCountry} onStatus={setStatus} />}
@@ -323,6 +325,7 @@ function Main() {
           initial={modal.dive}
           country={modal.country}
           spotId={modal.spotId}
+          onAddSpecies={addSpecies}
           onSave={(dive, newSpot) => {
             saveDive(dive, newSpot)
             setModal({ kind: 'dive', dive, back: modal.back })
@@ -338,12 +341,24 @@ function Main() {
         <DiveDetail
           dive={data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive}
           no={numbers[modal.dive.id]}
+          custom={data.customSpecies}
           spot={spots[(data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive).spotId]}
           onEdit={() => setModal({ kind: 'diveForm', dive: data.dives.find((d) => d.id === modal.dive.id) ?? modal.dive, back: modal.back })}
           onClose={() => setModal(modal.back ?? null)}
         />
       )}
 
+      {modal?.kind === 'import' && (
+        <ImportSheet
+          data={data}
+          onImport={(dives, spots) => {
+            importDives(dives, spots)
+            setModal(null)
+            setTab('dive')
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.kind === 'share' && <ShareSheet data={data} onClose={() => setModal(null)} />}
       {modal?.kind === 'settings' && (
         <Sheet onClose={() => setModal(null)} title={t.settings}>
