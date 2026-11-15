@@ -280,16 +280,6 @@ export default function WorldMap({ statuses, mode = 'travel', travelView = 'coun
       >
         <g transform={transform}>
           <Paths statuses={statuses} selected={selected} mode={mode} view={travelView} levels={levels} home={home} diveCountries={diveCountries} />
-          {home && mode === 'travel' && (() => {
-            const hb = countryBounds(home)
-            if (!hb) return null
-            const fs = 15 * px
-            return (
-              <text x={(hb[0][0] + hb[1][0]) / 2} y={(hb[0][1] + hb[1][1]) / 2 + fs * 0.35} fontSize={fs} textAnchor="middle" pointerEvents="none" className="home-mark">
-                🏠
-              </text>
-            )
-          })()}
           {projected.map((m) => {
             const [x, y] = m.p
             const r = (m.kind === 'other' ? 4 * shrink : m.kind === 'pick' ? 8 : m.kind === 'city' ? 5.5 * shrink : 7 * shrink) * px

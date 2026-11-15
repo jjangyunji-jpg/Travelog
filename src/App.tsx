@@ -549,7 +549,7 @@ function Main() {
             <div className="setting-row col">
               <span>
                 🏠 {lang === 'ko' ? '출생 국가' : 'Home country'}
-                <small className="muted">{lang === 'ko' ? '지도에 보라색과 🏠로 표시돼요' : 'Shown in purple with 🏠 on the map'}</small>
+                <small className="muted">{lang === 'ko' ? '지도에 보라색으로 표시돼요' : 'Shown in purple on the map'}</small>
               </span>
               <CountrySelect value={data.home ?? ''} onChange={setHome} />
               {data.home && <button className="link-btn" onClick={() => setHome('')}>{lang === 'ko' ? '지우기' : 'Clear'}</button>}
