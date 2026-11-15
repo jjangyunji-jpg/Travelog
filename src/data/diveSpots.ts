@@ -226,6 +226,7 @@ export interface DiveSpot {
   type?: string
   highlights: string[]
   custom?: boolean
+  updatedAt?: number
 }
 
 const slug = (s: string) =>

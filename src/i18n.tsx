@@ -37,6 +37,11 @@ const dict = {
     diveOffsetHint: '로그 번호가 이 숫자 다음부터 시작돼요.', times: '회', approx: '스팟 위치는 대략적인 좌표예요.',
     pickHint: '지도를 눌러 스팟 위치를 고르세요', confirm: '확인', diveTapHint: '나라를 누르면 다이빙 스팟이 보여요',
     noSpots: '등록된 스팟이 없어요. 직접 추가해 보세요.', viewDives: '🤿 다이빙 보기', recentDives: '최근 다이빙',
+
+    sync: '기기 간 동기화', syncDesc: '휴대폰·노트북·아이패드에서 같은 기록을 보려면 Google Drive에 연결하세요. 데이터는 내 Drive의 앱 전용 숨김 폴더에 저장돼요.',
+    syncConnect: 'Google Drive 연결', syncNow: '지금 동기화', syncOff: '연결 해제', syncing: '동기화 중…',
+    synced: '동기화됨', syncError: '동기화 실패', syncLogin: '다시 로그인 필요 (눌러서 연결)', lastSync: '마지막 동기화',
+    clientId: 'Google Client ID', clientIdHint: 'Google Cloud에서 만든 OAuth 클라이언트 ID를 붙여넣으세요.', never: '아직 안 함',
     seeAll: '전체 보기', airUsed: '사용 공기', unknownSpot: '알 수 없는 스팟', nitrox: '나이트록스',
   },
   en: {
@@ -71,6 +76,11 @@ const dict = {
     diveOffsetHint: 'Log numbers will continue from this number.', times: 'dives', approx: 'Site locations are approximate.',
     pickHint: 'Tap the map to set the site location', confirm: 'Done', diveTapHint: 'Tap a country to see dive sites',
     noSpots: 'No sites listed yet. Add your own.', viewDives: '🤿 View dives', recentDives: 'Recent dives',
+
+    sync: 'Sync across devices', syncDesc: 'Connect Google Drive to use the same logbook on your phone, laptop and iPad. Data is stored in a hidden app folder in your own Drive.',
+    syncConnect: 'Connect Google Drive', syncNow: 'Sync now', syncOff: 'Disconnect', syncing: 'Syncing…',
+    synced: 'Synced', syncError: 'Sync failed', syncLogin: 'Sign in again (tap to connect)', lastSync: 'Last synced',
+    clientId: 'Google Client ID', clientIdHint: 'Paste the OAuth client ID you created in Google Cloud.', never: 'Never',
     seeAll: 'See all', airUsed: 'Air used', unknownSpot: 'Unknown site', nitrox: 'Nitrox',
   },
 } as const

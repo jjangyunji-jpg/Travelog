@@ -14,6 +14,7 @@ export interface Trip {
   note: string
   photoIds: string[]
   createdAt: number
+  updatedAt?: number
 }
 
 export interface Dive {
@@ -42,6 +43,7 @@ export interface Dive {
   note: string
   photoIds: string[]
   createdAt: number
+  updatedAt?: number
 }
 
 export interface AppData {
@@ -51,19 +53,44 @@ export interface AppData {
   customSpots: DiveSpot[]
   /** 이 앱 이전에 기록한 다이빙 수 (로그 번호 시작값) */
   diveOffset: number
+  /* ---- 기기 간 동기화용 메타데이터 ---- */
+  /** 나라 표시를 마지막으로 바꾼 시각 */
+  statusTs: Record<string, number>
+  /** 삭제 기록 ('trip:id', 'dive:id', 'spot:id', 'status:KR') → 삭제 시각 */
+  deleted: Record<string, number>
+  diveOffsetTs: number
 }
 
 const KEY = 'travelog:data:v1'
-const EMPTY: AppData = { statuses: {}, trips: [], dives: [], customSpots: [], diveOffset: 0 }
+export const EMPTY: AppData = {
+  statuses: {},
+  trips: [],
+  dives: [],
+  customSpots: [],
+  diveOffset: 0,
+  statusTs: {},
+  deleted: {},
+  diveOffsetTs: 0,
+}
+
+/** 예전 형식의 데이터도 안전하게 읽기 */
+export const normalize = (d: Partial<AppData>): AppData => ({ ...EMPTY, ...d })
 
 function load(): AppData {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return { ...EMPTY, ...JSON.parse(raw) }
+    if (raw) return normalize(JSON.parse(raw))
   } catch {
     /* 저장소를 쓸 수 없는 환경 */
   }
   return EMPTY
+}
+
+function markVisited(d: AppData, code: string, now: number): AppData {
+  if (d.statuses[code] === 'visited') return d
+  const deleted = { ...d.deleted }
+  delete deleted['status:' + code]
+  return { ...d, statuses: { ...d.statuses, [code]: 'visited' }, statusTs: { ...d.statusTs, [code]: now }, deleted }
 }
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -81,19 +108,28 @@ export function useAppData() {
 
   const setStatus = useCallback((code: string, status: Status | null) => {
     setData((d) => {
+      const now = Date.now()
       const statuses = { ...d.statuses }
-      if (status) statuses[code] = status
-      else delete statuses[code]
-      return { ...d, statuses }
+      const deleted = { ...d.deleted }
+      if (status) {
+        statuses[code] = status
+        delete deleted['status:' + code]
+      } else {
+        delete statuses[code]
+        deleted['status:' + code] = now
+      }
+      return { ...d, statuses, deleted, statusTs: { ...d.statusTs, [code]: now } }
     })
   }, [])
 
   const saveTrip = useCallback((trip: Trip) => {
     setData((d) => {
+      const now = Date.now()
+      const stamped = { ...trip, updatedAt: now }
       const exists = d.trips.some((t) => t.id === trip.id)
-      const trips = exists ? d.trips.map((t) => (t.id === trip.id ? trip : t)) : [...d.trips, trip]
+      const trips = exists ? d.trips.map((t) => (t.id === trip.id ? stamped : t)) : [...d.trips, stamped]
       // 기록을 남긴 나라는 자동으로 '방문함'
-      return { ...d, trips, statuses: { ...d.statuses, [trip.country]: 'visited' } }
+      return markVisited({ ...d, trips }, trip.country, now)
     })
   }, [])
 
@@ -101,31 +137,36 @@ export function useAppData() {
     setData((d) => {
       const trip = d.trips.find((t) => t.id === id)
       trip?.photoIds.forEach((p) => del(photoKey(p)))
-      return { ...d, trips: d.trips.filter((t) => t.id !== id) }
+      return { ...d, trips: d.trips.filter((t) => t.id !== id), deleted: { ...d.deleted, ['trip:' + id]: Date.now() } }
     })
   }, [])
 
   const saveDive = useCallback((dive: Dive, newSpot?: DiveSpot) => {
     setData((d) => {
+      const now = Date.now()
+      const stamped = { ...dive, updatedAt: now }
       const exists = d.dives.some((x) => x.id === dive.id)
-      const dives = exists ? d.dives.map((x) => (x.id === dive.id ? dive : x)) : [...d.dives, dive]
-      const customSpots = newSpot ? [...d.customSpots, newSpot] : d.customSpots
-      return { ...d, dives, customSpots, statuses: { ...d.statuses, [dive.country]: 'visited' } }
+      const dives = exists ? d.dives.map((x) => (x.id === dive.id ? stamped : x)) : [...d.dives, stamped]
+      const customSpots = newSpot ? [...d.customSpots, { ...newSpot, updatedAt: now }] : d.customSpots
+      return markVisited({ ...d, dives, customSpots }, dive.country, now)
     })
   }, [])
 
   const deleteDive = useCallback((id: string) => {
     setData((d) => {
       d.dives.find((x) => x.id === id)?.photoIds.forEach((p) => del(photoKey(p)))
-      return { ...d, dives: d.dives.filter((x) => x.id !== id) }
+      return { ...d, dives: d.dives.filter((x) => x.id !== id), deleted: { ...d.deleted, ['dive:' + id]: Date.now() } }
     })
   }, [])
 
-  const setDiveOffset = useCallback((n: number) => setData((d) => ({ ...d, diveOffset: Math.max(0, n || 0) })), [])
+  const setDiveOffset = useCallback(
+    (n: number) => setData((d) => ({ ...d, diveOffset: Math.max(0, n || 0), diveOffsetTs: Date.now() })),
+    [],
+  )
 
-  const replaceAll = useCallback((next: AppData) => setData({ ...EMPTY, ...next }), [])
+  const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */

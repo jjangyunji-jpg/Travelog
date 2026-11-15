@@ -298,3 +298,19 @@ h2, h3 { margin: 0; }
 .setting-row input { width: 90px; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px; font-size: 16px; text-align: right; }
 .settings { display: flex; flex-direction: column; gap: 10px; }
 .tabbar { grid-template-columns: repeat(5, 1fr); }
+
+/* ---------- 동기화 ---------- */
+.sync-pill { border: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--line); font-size: 16px; display: grid; place-items: center; }
+.sync-pill.idle { color: var(--dive); }
+.sync-pill.syncing { animation: spin 1s linear infinite; color: var(--dive); }
+.sync-pill.error, .sync-pill.needsLogin { color: #c97a00; background: color-mix(in srgb, #f5a524 20%, transparent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sync-box { display: flex; flex-direction: column; gap: 10px; border: 1.5px solid var(--dive); border-radius: 14px; padding: 14px; }
+.sync-box p { margin: 0; line-height: 1.5; }
+.sync-box .row .btn { flex: 1; }
+.sync-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sync-state { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--line); }
+.sync-state.idle { color: var(--dive); }
+.sync-state.error, .sync-state.needsLogin { color: #c97a00; }
+.client-id { display: flex; flex-direction: column; gap: 4px; }
+.client-id input { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 10px; font-size: 14px; }

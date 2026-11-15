@@ -16,7 +16,15 @@ export default function CountryListView({ statuses, onSelect, onStatus }: {
     return COUNTRIES.filter((c) => c.continent !== 'AN' || c.code === 'AQ')
       .filter((c) => cont === 'ALL' || c.continent === cont)
       .filter((c) => !query || c.nameKo.includes(query) || c.nameEn.toLowerCase().includes(query) || c.code.toLowerCase() === query)
-      .sort((a, b) => cName(a).localeCompare(cName(b)))
+      .sort((a, b) => {
+        // 검색어로 시작하는 이름을 먼저 (예: '프랑스' 검색 시 프랑스가 맨 위)
+        if (query) {
+          const sa = Number(!(a.nameKo.startsWith(query) || a.nameEn.toLowerCase().startsWith(query)))
+          const sb = Number(!(b.nameKo.startsWith(query) || b.nameEn.toLowerCase().startsWith(query)))
+          if (sa !== sb) return sa - sb
+        }
+        return cName(a).localeCompare(cName(b))
+      })
   }, [q, cont, cName])
 
   return (

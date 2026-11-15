@@ -15,6 +15,8 @@ import TripCard from './components/TripCard'
 import DiveForm from './components/DiveForm'
 import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, SpotSheet } from './components/DiveViews'
 import Sheet from './components/Sheet'
+import { useSync } from './sync/useSync'
+import { getClientId, setClientId } from './sync/drive'
 
 type Tab = 'map' | 'journal' | 'dive' | 'stats' | 'list'
 type Modal =
@@ -64,13 +66,16 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, setDiveOffset, replaceAll } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
   const [focus, setFocus] = useState<{ code: string; n: number } | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   const stats = computeStats(data)
+  const sync = useSync(data, setData)
+  const [clientId, setClientIdState] = useState(getClientId)
+  const startSync = () => sync.connect().catch(() => {})
   const fileRef = useRef<HTMLInputElement>(null)
 
   const spots = useMemo(() => spotMap(data), [data])
@@ -139,6 +144,15 @@ function Main() {
           <span className="logo">✈︎</span> Travelog
         </div>
         <div className="top-actions">
+          {sync.enabled && (
+            <button
+              className={`sync-pill ${sync.state}`}
+              onClick={() => (sync.state === 'syncing' ? null : startSync())}
+              title={sync.state === 'needsLogin' ? t.syncLogin : sync.state === 'error' ? t.syncError : t.synced}
+            >
+              {sync.state === 'syncing' ? '🔄' : sync.state === 'idle' ? '☁️' : '⚠️'}
+            </button>
+          )}
           <button className="btn ghost small" onClick={() => setModal({ kind: 'share' })}>{t.share}</button>
           <button className="icon-btn" onClick={() => setModal({ kind: 'settings' })} aria-label={t.settings}>⚙︎</button>
         </div>
@@ -342,6 +356,46 @@ function Main() {
               </span>
               <input type="number" inputMode="numeric" min={0} value={data.diveOffset || ''} placeholder="0" onChange={(e) => setDiveOffset(Number(e.target.value))} />
             </label>
+            <div className="sync-box">
+              <div className="sync-head">
+                <b>☁️ {t.sync}</b>
+                {sync.enabled && (
+                  <span className={`sync-state ${sync.state}`}>
+                    {sync.state === 'syncing' ? t.syncing : sync.state === 'idle' ? t.synced : sync.state === 'needsLogin' ? t.syncLogin : t.syncError}
+                  </span>
+                )}
+              </div>
+              <p className="muted small">{t.syncDesc}</p>
+              {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                <label className="client-id">
+                  <span className="small">{t.clientId}</span>
+                  <input
+                    value={clientId}
+                    placeholder="xxxx.apps.googleusercontent.com"
+                    onChange={(e) => {
+                      setClientIdState(e.target.value)
+                      setClientId(e.target.value)
+                    }}
+                  />
+                  <small className="muted">{t.clientIdHint}</small>
+                </label>
+              )}
+              {sync.enabled ? (
+                <>
+                  <div className="row">
+                    <button className="btn primary" onClick={startSync} disabled={sync.state === 'syncing'}>🔄 {t.syncNow}</button>
+                    <button className="btn ghost" onClick={sync.disconnect}>{t.syncOff}</button>
+                  </div>
+                  <small className="muted">
+                    {t.lastSync}: {sync.lastSync ? new Date(sync.lastSync).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US') : t.never}
+                    {sync.state === 'error' && sync.error && ` · ${sync.error}`}
+                  </small>
+                </>
+              ) : (
+                <button className="btn primary" onClick={startSync} disabled={!clientId}>{t.syncConnect}</button>
+              )}
+              {!sync.enabled && sync.error && sync.error !== 'no-client-id' && <small className="muted">{t.syncError}: {sync.error}</small>}
+            </div>
             <button className="btn ghost block" onClick={doExport}>⬇︎ {t.backup}</button>
             <button className="btn ghost block" onClick={() => fileRef.current?.click()}>⬆︎ {t.restore}</button>
             <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => doImport(e.target.files?.[0])} />
