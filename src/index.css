@@ -477,3 +477,13 @@ h2, h3 { margin: 0; }
 .place-chip button { border: 0; background: transparent; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; color: var(--muted); }
 .place-search { position: relative; }
 .place-search .cs-list small { margin-left: auto; }
+.legend .no-city { border: 0; background: color-mix(in srgb, #f5a524 16%, transparent); color: #8a5300; border-radius: 10px; padding: 7px 10px; font-size: 13px; font-weight: 600; text-align: left; width: 100%; }
+
+/* ---------- 출생 국가 ---------- */
+:root { --home: #8e6ff5; --home-soft: #d9cffd; }
+@media (prefers-color-scheme: dark) { :root { --home: #9b80ff; --home-soft: #3d3266; } }
+.dot.home { background: var(--home); }
+.visit-count.home { color: #5b3fd1; background: color-mix(in srgb, var(--home) 18%, transparent); }
+.link-btn { border: 0; background: none; color: var(--primary); font-weight: 600; font-size: 13px; padding: 2px 0; text-align: left; }
+.setting-row.col { flex-direction: column; align-items: stretch; }
+.home-mark { filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)); }

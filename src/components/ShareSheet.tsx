@@ -41,7 +41,7 @@ async function renderImage(data: AppData, lang: string, title: string, ofWorld: 
   ctx.strokeStyle = '#0f2a3f'
   for (const p of COUNTRY_PATHS) {
     const st = data.statuses[p.code]
-    ctx.fillStyle = st === 'visited' ? VISIT[visitLevel(counts[p.code] ?? 1) - 1] : st === 'wish' ? '#5fd3c4' : '#2d5f7d'
+    ctx.fillStyle = p.code === data.home ? '#b197fc' : st === 'visited' ? VISIT[visitLevel(counts[p.code] ?? 1) - 1] : st === 'wish' ? '#5fd3c4' : '#2d5f7d'
     const path = new Path2D(p.d)
     ctx.fill(path)
     ctx.stroke(path)
@@ -70,6 +70,7 @@ async function renderImage(data: AppData, lang: string, title: string, ofWorld: 
   const legend: [string, string][] = [
     ['#ffb547', lang === 'ko' ? '가 봤어요' : 'Been there'],
     ['#5fd3c4', lang === 'ko' ? '가고 싶어요' : 'Want to go'],
+    ...(data.home ? [['#b197fc', lang === 'ko' ? '출생 국가' : 'Home'] as [string, string]] : []),
   ]
   let lx = 72
   ctx.font = font(500, 30)

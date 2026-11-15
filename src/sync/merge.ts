@@ -54,6 +54,8 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
     diveOffset: remoteNewerOffset ? remote.diveOffset : local.diveOffset,
     diveOffsetTs: Math.max(local.diveOffsetTs, remote.diveOffsetTs),
     customSpecies: { ...remote.customSpecies, ...local.customSpecies },
+    home: (remote.homeTs ?? 0) > (local.homeTs ?? 0) ? remote.home : local.home,
+    homeTs: Math.max(local.homeTs ?? 0, remote.homeTs ?? 0) || undefined,
   }
 }
 

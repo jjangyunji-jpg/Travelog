@@ -67,6 +67,8 @@ interface Props {
   travelView?: TravelView
   /** 나라별 방문 색 단계 1~4 */
   levels?: Record<string, number>
+  /** 출생 국가 */
+  home?: string
   diveCountries?: Set<string>
   markers?: MapMarker[]
   selected?: string
@@ -78,7 +80,8 @@ interface Props {
   onPick?: (lat: number, lon: number) => void
 }
 
-function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: boolean, level?: number) {
+function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: boolean, level?: number, isHome?: boolean) {
+  if (isHome && mode === 'travel') return view === 'city' ? 'var(--home-soft)' : 'var(--home)'
   if (mode === 'dive') {
     if (dived) return 'var(--dive-land)'
     return s === 'visited' ? 'var(--visited-soft)' : 'var(--land)'
@@ -87,7 +90,8 @@ function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: 
   return s === 'visited' ? `var(--visit-${level ?? 1})` : s === 'wish' ? 'var(--wish)' : 'var(--land)'
 }
 
-const Paths = memo(function Paths({ statuses, selected, mode, view, levels, diveCountries }: {
+const Paths = memo(function Paths({ statuses, selected, mode, view, levels, home, diveCountries }: {
+  home?: string
   statuses: Record<string, Status>
   selected?: string
   mode: MapMode
@@ -102,7 +106,7 @@ const Paths = memo(function Paths({ statuses, selected, mode, view, levels, dive
           key={i}
           d={p.d}
           data-code={p.code}
-          fill={fillFor(mode, view, statuses[p.code], !!diveCountries?.has(p.code), levels?.[p.code])}
+          fill={fillFor(mode, view, statuses[p.code], !!diveCountries?.has(p.code), levels?.[p.code], p.code === home)}
           className={p.code === selected ? 'country selected' : 'country'}
         />
       ))}
@@ -119,7 +123,7 @@ const clamp = (v: View): View => {
   return { k, x, y }
 }
 
-export default function WorldMap({ statuses, mode = 'travel', travelView = 'country', levels, diveCountries, markers, selected, onSelect, onSelectSpot, focus, onPick }: Props) {
+export default function WorldMap({ statuses, mode = 'travel', travelView = 'country', levels, home, diveCountries, markers, selected, onSelect, onSelectSpot, focus, onPick }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState<View>({ k: 1, x: 0, y: 0 })
   const viewRef = useRef(view)
@@ -275,7 +279,17 @@ export default function WorldMap({ statuses, mode = 'travel', travelView = 'coun
         onPointerCancel={onPointerUp}
       >
         <g transform={transform}>
-          <Paths statuses={statuses} selected={selected} mode={mode} view={travelView} levels={levels} diveCountries={diveCountries} />
+          <Paths statuses={statuses} selected={selected} mode={mode} view={travelView} levels={levels} home={home} diveCountries={diveCountries} />
+          {home && mode === 'travel' && (() => {
+            const hb = countryBounds(home)
+            if (!hb) return null
+            const fs = 15 * px
+            return (
+              <text x={(hb[0][0] + hb[1][0]) / 2} y={(hb[0][1] + hb[1][1]) / 2 + fs * 0.35} fontSize={fs} textAnchor="middle" pointerEvents="none" className="home-mark">
+                🏠
+              </text>
+            )
+          })()}
           {projected.map((m) => {
             const [x, y] = m.p
             const r = (m.kind === 'other' ? 4 * shrink : m.kind === 'pick' ? 8 : m.kind === 'city' ? 5.5 * shrink : 7 * shrink) * px

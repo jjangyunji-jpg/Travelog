@@ -84,6 +84,9 @@ export interface AppData {
   deleted: Record<string, number>
   diveOffsetTs: number
   customSpecies: Record<string, CustomSpecies>
+  /** 출생 국가 (홈) */
+  home?: string
+  homeTs?: number
 }
 
 const KEY = 'travelog:data:v1'
@@ -222,9 +225,17 @@ export function useAppData() {
     })
   }, [])
 
+  const setHome = useCallback((code: string) => {
+    setData((d) => {
+      const now = Date.now()
+      const next = { ...d, home: code || undefined, homeTs: now }
+      return code ? markVisited(next, code, now) : next
+    })
+  }, [])
+
   const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */

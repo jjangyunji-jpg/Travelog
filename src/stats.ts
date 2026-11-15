@@ -44,6 +44,8 @@ export function visitCounts(data: AppData): Record<string, number> {
     out[c] = (out[c] ?? 0) + groups
   }
   for (const [c, s] of Object.entries(data.statuses)) if (s === 'visited' && !out[c]) out[c] = 1
+  // 출생 국가는 방문 횟수 색에서 제외 (따로 보라색)
+  if (data.home) delete out[data.home]
   return out
 }
 
