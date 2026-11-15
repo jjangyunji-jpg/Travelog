@@ -9,6 +9,7 @@ interface Props {
   status?: Status
   trips: Trip[]
   diveCount: number
+  visits?: number
   spotCount: number
   onDive: () => void
   onStatus: (s: Status | null) => void
@@ -17,8 +18,8 @@ interface Props {
   onClose: () => void
 }
 
-export default function CountrySheet({ code, status, trips, diveCount, spotCount, onDive, onStatus, onAddTrip, onOpenTrip, onClose }: Props) {
-  const { t, cName, contName } = useI18n()
+export default function CountrySheet({ code, status, trips, visits, diveCount, spotCount, onDive, onStatus, onAddTrip, onOpenTrip, onClose }: Props) {
+  const { t, cName, contName, pick } = useI18n()
   const c = COUNTRY_BY_CODE[code]
   return (
     <Sheet
@@ -27,7 +28,10 @@ export default function CountrySheet({ code, status, trips, diveCount, spotCount
         <div className="country-title">
           <span className="big-flag">{flagEmoji(code)}</span>
           <div>
-            <div className="name">{cName(c)}</div>
+            <div className="name">
+              {cName(c)}
+              {status === 'visited' && visits ? <span className="visit-count">{pick(`${visits}번 방문`, `${visits}× visited`)}</span> : null}
+            </div>
             <div className="muted small">{c && contName(c.continent)}</div>
           </div>
         </div>

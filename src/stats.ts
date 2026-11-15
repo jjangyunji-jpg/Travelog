@@ -19,3 +19,33 @@ export function computeStats(data: AppData) {
   }, 0)
   return { visited, wish, visitedSovereign, percent, byContinent, continentsVisited, days, total: SOVEREIGN_COUNT }
 }
+
+/**
+ * 나라별 방문 횟수 = 여행 기록 수 + 여행 기록 기간 밖의 다이빙 여행 수
+ * (다이빙 날짜가 7일 넘게 떨어지면 다른 여행으로 봄). 표시만 하고 기록이 없으면 1회
+ */
+export function visitCounts(data: AppData): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const t of data.trips) out[t.country] = (out[t.country] ?? 0) + 1
+  const byCountry: Record<string, string[]> = {}
+  for (const d of data.dives) {
+    if (!d.date) continue
+    const covered = data.trips.some((t) => t.country === d.country && t.startDate && d.date >= t.startDate && d.date <= (t.endDate || t.startDate))
+    if (!covered) (byCountry[d.country] ??= []).push(d.date)
+  }
+  for (const [c, dates] of Object.entries(byCountry)) {
+    const days = [...new Set(dates)].sort().map((x) => new Date(x + 'T00:00:00').getTime() / 86400000)
+    let groups = 0
+    let prev = -Infinity
+    for (const day of days) {
+      if (day - prev > 7) groups++
+      prev = day
+    }
+    out[c] = (out[c] ?? 0) + groups
+  }
+  for (const [c, s] of Object.entries(data.statuses)) if (s === 'visited' && !out[c]) out[c] = 1
+  return out
+}
+
+/** 방문 횟수 → 색 단계 1~4 (1회 / 2회 / 3~4회 / 5회+) */
+export const visitLevel = (n: number) => (n >= 5 ? 4 : n >= 3 ? 3 : n >= 2 ? 2 : 1)

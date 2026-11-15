@@ -13,6 +13,8 @@ export interface Trip {
   endDate: string
   note: string
   photoIds: string[]
+  /** 간 도시 좌표 (지도 '도시 보기'에 점으로 표시) */
+  places?: { name: string; lat: number; lon: number }[]
   createdAt: number
   updatedAt?: number
 }
@@ -212,9 +214,17 @@ export function useAppData() {
     [],
   )
 
+  /** 여러 여행 기록 일부 수정 (도시 좌표 자동 채우기 등) */
+  const patchTrips = useCallback((patches: Record<string, Partial<Trip>>) => {
+    setData((d) => {
+      const now = Date.now()
+      return { ...d, trips: d.trips.map((t) => (patches[t.id] ? { ...t, ...patches[t.id], updatedAt: now } : t)) }
+    })
+  }, [])
+
   const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */

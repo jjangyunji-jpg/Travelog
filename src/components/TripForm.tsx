@@ -4,6 +4,8 @@ import { useI18n } from '../i18n'
 import { deletePhoto, savePhoto, uid, type Trip } from '../store'
 import Sheet from './Sheet'
 import CountrySelect from './CountrySelect'
+import PlacePicker from './PlacePicker'
+import { splitCities } from '../geo'
 import { Thumb } from './TripCard'
 
 interface Props {
@@ -76,7 +78,21 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
         </label>
         <label>
           <span>{t.city}</span>
-          <input value={trip.city} onChange={(e) => up({ city: e.target.value })} placeholder={t.cityPh} />
+          <PlacePicker
+            country={trip.country}
+            placeholder={t.cityPh}
+            places={[
+              ...(trip.places ?? []),
+              // 예전 기록: 좌표 없이 이름만 있는 도시
+              ...splitCities(trip.city)
+                .filter((n) => !(trip.places ?? []).some((p) => p.name === n))
+                .map((name) => ({ name })),
+            ]}
+            onChange={(list) => {
+              const withCoords = list.filter((p): p is { name: string; lat: number; lon: number } => 'lat' in p && p.lat != null)
+              up({ places: withCoords, city: list.map((p) => p.name).join(', ') })
+            }}
+          />
         </label>
         <div className="row">
           <label>

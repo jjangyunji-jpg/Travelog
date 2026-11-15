@@ -457,3 +457,23 @@ h2, h3 { margin: 0; }
 .ble { font-size: 12px; line-height: 1.5; }
 .ble.yes { color: var(--dive); }
 .ble.no { color: var(--muted); }
+
+/* ---------- 방문 횟수 색 단계 · 도시 보기 ---------- */
+:root { --visit-1: #fdd88a; --visit-2: #f5a524; --visit-3: #e8730c; --visit-4: #b8460b; --wish-soft: #bfe9e3; --city: #e5590c; }
+@media (prefers-color-scheme: dark) {
+  :root { --visit-1: #7a5a22; --visit-2: #b8791a; --visit-3: #e0811a; --visit-4: #ffa94d; --wish-soft: #24504b; --city: #ff8a3d; }
+}
+.pin.city .pin-dot { fill: var(--city); stroke: #fff; stroke-width: 1.5; }
+.view-switch { display: inline-flex; background: var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.view-switch button { border: 0; background: transparent; border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.view-switch button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.legend .steps-legend { display: inline-flex; align-items: center; gap: 4px; }
+.legend .steps-legend i { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+.dot.city { background: var(--city); box-shadow: 0 0 0 1.5px #fff inset; }
+.visit-count { font-size: 12px; font-weight: 700; color: var(--visit-4); background: color-mix(in srgb, var(--visit-1) 50%, transparent); border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+.place-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.place-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 5px 6px 5px 10px; font-size: 14px; background: color-mix(in srgb, var(--city) 14%, transparent); border: 1px solid color-mix(in srgb, var(--city) 40%, transparent); }
+.place-chip.nocoord { background: var(--bg); border-color: var(--line); }
+.place-chip button { border: 0; background: transparent; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; color: var(--muted); }
+.place-search { position: relative; }
+.place-search .cs-list small { margin-left: auto; }

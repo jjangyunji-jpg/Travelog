@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { I18nContext, useI18n, type Lang } from './i18n'
 import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } from './store'
-import { computeStats } from './stats'
+import { computeStats, visitCounts, visitLevel } from './stats'
+import { geocodeCities, splitCities } from './geo'
 import { diveNumbers, sortDivesDesc, spotMap } from './dive'
-import WorldMap, { type MapMarker, type MapMode } from './components/WorldMap'
+import WorldMap, { type MapMarker, type MapMode, type TravelView } from './components/WorldMap'
 import CountrySheet from './components/CountrySheet'
 import TripForm from './components/TripForm'
 import TripDetail from './components/TripDetail'
@@ -73,10 +74,25 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, replaceAll } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, replaceAll } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
+  const [travelView, setTravelViewState] = useState<TravelView>(() => {
+    try {
+      return localStorage.getItem('travelog:view') === 'city' ? 'city' : 'country'
+    } catch {
+      return 'country'
+    }
+  })
+  const setTravelView = (v: TravelView) => {
+    setTravelViewState(v)
+    try {
+      localStorage.setItem('travelog:view', v)
+    } catch {
+      /* 무시 */
+    }
+  }
   const [focus, setFocus] = useState<{ code: string; n: number } | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   const stats = computeStats(data)
@@ -88,13 +104,45 @@ function Main() {
   const spots = useMemo(() => spotMap(data), [data])
   const numbers = useMemo(() => diveNumbers(data), [data])
   const diveCountries = useMemo(() => new Set(data.dives.map((d) => d.country)), [data.dives])
+  const visits = useMemo(() => visitCounts(data), [data])
+  const levels = useMemo(() => Object.fromEntries(Object.entries(visits).map(([c, n]) => [c, visitLevel(n)])), [visits])
+  const cityPins = useMemo<MapMarker[]>(
+    () => data.trips.flatMap((t) => (t.places ?? []).map((p, i) => ({ id: `city:${t.id}:${i}`, lat: p.lat, lon: p.lon, kind: 'city' as const }))),
+    [data.trips],
+  )
+  const cityCount = useMemo(() => new Set(data.trips.flatMap((t) => (t.places ?? []).map((p) => `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`))).size, [data.trips])
+
+  // 도시 보기: 좌표 없는 도시 이름을 자동으로 좌표로 (인터넷 될 때, 기록마다 한 번)
+  const geoTried = useRef(new Set<string>())
+  useEffect(() => {
+    if (mapMode !== 'travel' || travelView !== 'city' || !navigator.onLine) return
+    // 좌표가 없는 도시 이름이 하나라도 있는 기록
+    const missing = (t: Trip) => splitCities(t.city).filter((n) => !(t.places ?? []).some((p) => p.name === n))
+    const todo = data.trips.filter((t) => missing(t).length && !geoTried.current.has(t.id + t.city))
+    if (!todo.length) return
+    let alive = true
+    ;(async () => {
+      const patches: Record<string, { places: { name: string; lat: number; lon: number }[] }> = {}
+      for (const t of todo) {
+        geoTried.current.add(t.id + t.city)
+        const found = await geocodeCities(missing(t).join(','), t.country, lang).catch(() => [])
+        if (found.length) patches[t.id] = { places: [...(t.places ?? []), ...found] }
+      }
+      if (alive && Object.keys(patches).length) patchTrips(patches)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapMode, travelView, data.trips])
+
   const markers = useMemo<MapMarker[]>(() => {
-    if (mapMode !== 'dive') return []
+    if (mapMode === 'travel') return travelView === 'city' ? cityPins : []
     const mine = new Set(data.dives.map((d) => d.spotId))
     return Object.values(spots)
       .filter((s) => isFinite(s.lat) && isFinite(s.lon) && (mine.has(s.id) || (showAllSpots && !s.custom)))
       .map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, kind: mine.has(s.id) ? 'mine' : 'other' }))
-  }, [mapMode, spots, data.dives, showAllSpots])
+  }, [mapMode, travelView, cityPins, spots, data.dives, showAllSpots])
 
   const goTab = (next: Tab) => {
     setFocus(null)
@@ -115,6 +163,11 @@ function Main() {
     setModal({ kind: 'diveCountry', code })
   }
   const openSpot = (id: string) => {
+    if (id.startsWith('city:')) {
+      const trip = data.trips.find((t) => t.id === id.split(':')[1])
+      if (trip) setModal({ kind: 'trip', trip })
+      return
+    }
     const s = spots[id]
     if (s && isFinite(s.lat) && tab === 'map') setFocus((f) => ({ code: s.country, n: (f?.n ?? 0) + 1 }))
     setModal({ kind: 'spot', id })
@@ -195,6 +248,8 @@ function Main() {
             <WorldMap
               statuses={data.statuses}
               mode={mapMode}
+              travelView={travelView}
+              levels={levels}
               diveCountries={diveCountries}
               markers={markers}
               focus={focus}
@@ -204,9 +259,25 @@ function Main() {
             />
             {mapMode === 'travel' ? (
               <div className="legend">
-                <span><i className="dot visited" />{t.visited}</span>
-                <span><i className="dot wish" />{t.wish}</span>
-                <span className="muted">{t.tapHint}</span>
+                <div className="view-switch" role="tablist">
+                  <button className={travelView === 'country' ? 'on' : ''} onClick={() => setTravelView('country')}>🏳 {lang === 'ko' ? '나라' : 'Countries'}</button>
+                  <button className={travelView === 'city' ? 'on' : ''} onClick={() => setTravelView('city')}>📍 {lang === 'ko' ? '도시' : 'Cities'}</button>
+                </div>
+                {travelView === 'country' ? (
+                  <>
+                    <span className="steps-legend" title={lang === 'ko' ? '방문 횟수' : 'Visits'}>
+                      <i style={{ background: 'var(--visit-1)' }} /><i style={{ background: 'var(--visit-2)' }} /><i style={{ background: 'var(--visit-3)' }} /><i style={{ background: 'var(--visit-4)' }} />
+                      <small className="muted">{lang === 'ko' ? '1 → 5회+' : '1 → 5+ visits'}</small>
+                    </span>
+                    <span><i className="dot wish" />{t.wish}</span>
+                  </>
+                ) : (
+                  <span>
+                    <i className="dot city" />
+                    {lang === 'ko' ? `간 도시 ${cityCount}곳` : `${cityCount} cities`}
+                    {data.trips.some((tr) => splitCities(tr.city).some((n) => !(tr.places ?? []).some((p) => p.name === n)) && !geoTried.current.has(tr.id + tr.city)) && <small className="muted"> · {lang === 'ko' ? '위치 찾는 중…' : 'locating…'}</small>}
+                  </span>
+                )}
               </div>
             ) : (
               <div className="legend">
@@ -283,6 +354,7 @@ function Main() {
           code={modal.code}
           status={data.statuses[modal.code]}
           trips={tripsOf(modal.code)}
+          visits={visits[modal.code]}
           diveCount={data.dives.filter((d) => d.country === modal.code).length}
           spotCount={Object.values(spots).filter((s) => s.country === modal.code).length}
           onDive={() => openDiveCountry(modal.code)}

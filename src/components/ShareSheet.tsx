@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n'
 import type { AppData } from '../store'
-import { computeStats } from '../stats'
+import { computeStats, visitCounts, visitLevel } from '../stats'
 import Sheet from './Sheet'
 import { COUNTRY_PATHS, MAP_H, MAP_W } from './WorldMap'
 
@@ -35,11 +35,13 @@ async function renderImage(data: AppData, lang: string, title: string, ofWorld: 
   ctx.save()
   ctx.translate(40, 300)
   ctx.scale(scale, scale)
+  const counts = visitCounts(data)
+  const VISIT = ['#ffd27a', '#ffb547', '#ff8f2e', '#ff6b1a']
   ctx.lineWidth = 0.4
   ctx.strokeStyle = '#0f2a3f'
   for (const p of COUNTRY_PATHS) {
     const st = data.statuses[p.code]
-    ctx.fillStyle = st === 'visited' ? '#ffb547' : st === 'wish' ? '#5fd3c4' : '#2d5f7d'
+    ctx.fillStyle = st === 'visited' ? VISIT[visitLevel(counts[p.code] ?? 1) - 1] : st === 'wish' ? '#5fd3c4' : '#2d5f7d'
     const path = new Path2D(p.d)
     ctx.fill(path)
     ctx.stroke(path)
