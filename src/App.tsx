@@ -543,6 +543,27 @@ function Main() {
                 )}
               </div>
               <p className="muted small">{t.syncDesc}</p>
+              <div className="origin-box">
+                <small className="muted">
+                  {lang === 'ko'
+                    ? 'Google Cloud → 클라이언트 → "승인된 JavaScript 원본"에 아래 주소가 있어야 해요 (origin_mismatch 오류가 나면 이 주소를 추가)'
+                    : 'This address must be in Google Cloud → Client → "Authorized JavaScript origins" (fixes origin_mismatch)'}
+                </small>
+                <div className="origin-row">
+                  <code>{location.origin}</code>
+                  <button
+                    className="btn ghost small"
+                    onClick={() =>
+                      navigator.clipboard
+                        ?.writeText(location.origin)
+                        .then(() => alert(lang === 'ko' ? '주소를 복사했어요' : 'Copied'))
+                        .catch(() => {})
+                    }
+                  >
+                    {lang === 'ko' ? '복사' : 'Copy'}
+                  </button>
+                </div>
+              </div>
               {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
                 <label className="client-id">
                   <span className="small">{t.clientId}</span>
