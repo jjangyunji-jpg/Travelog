@@ -80,8 +80,50 @@ export default function ProfileChart({ series, title }: { series: Series[]; titl
           <path key={'pl' + i} d={pathOf(s.points)} className="pf-plan" />
         ))}
         <path d={pathOf(main.points)} className="pf-line" />
-        <Diver x={x(diverT)} y={y(deepest[1]) - 8} s={0.9} />
-        <text x={Math.min(x(deepest[0]) + 4, W - 40)} y={y(deepest[1]) + 12} className="pf-label strong">{deepest[1]}m</text>
+        {(() => {
+          // 다이버 전체(오리발 끝 ~ 머리)가 그래프의 물 영역 안에 들어오는 위치 찾기
+          const S = 0.9
+          const pts = main.points.map(([t, d]) => [x(t), y(d)] as [number, number])
+          const depthYAt = (px: number) => {
+            const i = pts.findIndex((p) => p[0] >= px)
+            if (i <= 0) return pts[0][1]
+            const a = pts[i - 1]
+            const b = pts[i]
+            return a[1] + ((b[1] - a[1]) * (px - a[0])) / Math.max(0.01, b[0] - a[0])
+          }
+          // 높이 yy에서 물 영역의 왼쪽·오른쪽 경계 (하강선·상승선)
+          const span = (yy: number) => {
+            const l = pts.find((p) => p[1] >= yy)?.[0] ?? pad.l
+            const r = [...pts].reverse().find((p) => p[1] >= yy)?.[0] ?? W - pad.r
+            return [l, r]
+          }
+          const fits = (dx: number, dy: number) => {
+            const top = dy - 7 * S
+            const bottom = dy + 6 * S
+            const [l1, r1] = span(top)
+            const [l2, r2] = span(bottom)
+            return dx - 25 * S > Math.max(l1, l2, pad.l) + 2 && dx + 16 * S < Math.min(r1, r2, W - pad.r) - 2 && bottom < depthYAt(dx - 25 * S) && bottom < depthYAt(dx + 16 * S)
+          }
+          let best: [number, number] | undefined
+          const start = Math.max(pad.l + 26 * S, x(diverT))
+          for (let dx = start; dx < W - pad.r - 18 * S && !best; dx += 2) {
+            // 바닥선보다 조금 위, 필요하면 더 위로
+            for (let lift = 8; lift <= 30 && !best; lift += 3) {
+              const dy = Math.max(pad.t + 22 * S, depthYAt(dx) - lift)
+              if (fits(dx, dy)) best = [dx, dy]
+            }
+          }
+          const [dx, dy] = best ?? [Math.min(W - pad.r - 18 * S, Math.max(pad.l + 26 * S, x(diverT))), Math.max(pad.t + 22 * S, depthYAt(x(diverT)) - 8)]
+          return <Diver x={dx} y={dy} s={S} />
+        })()}
+        {/* 최대 수심 글자: 시간 눈금과 겹치면 선 위로 */}
+        <text
+          x={Math.min(x(deepest[0]) + 4, W - 40)}
+          y={y(deepest[1]) + 12 > H - pad.b + 2 ? y(deepest[1]) - 5 : y(deepest[1]) + 12}
+          className="pf-label strong"
+        >
+          {deepest[1]}m
+        </text>
       </svg>
     </figure>
   )

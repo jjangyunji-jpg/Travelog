@@ -70,10 +70,11 @@ function naturalCurve(depth: number, totalMin: number, stop: number): [number, n
     keys = [
       [0, 0],
       [dEnd, depth],
-      [dEnd + B * 0.28, depth * 0.96],
-      [dEnd + B * 0.55, depth * 0.8],
-      [dEnd + B * 0.8, Math.max(stop + 3, depth * 0.62)],
-      [dEnd + B, Math.max(stop + 2, depth * 0.45)],
+      // 안전정지 수심까지 남은 폭에 비례해 점점 얕아짐 (얕은 다이빙에서도 다시 깊어지지 않게)
+      [dEnd + B * 0.28, depth - (depth - stop) * 0.05],
+      [dEnd + B * 0.55, depth - (depth - stop) * 0.3],
+      [dEnd + B * 0.8, depth - (depth - stop) * 0.55],
+      [dEnd + B, depth - (depth - stop) * 0.75],
       [stopStart, stop],
       [stopStart + 3, stop],
       [end, 0],
