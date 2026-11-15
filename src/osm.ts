@@ -20,25 +20,52 @@ const ENDPOINTS = [
 ]
 const KEY = 'travelog:osm:'
 
+/** 한 서버에 요청 (20초 넘으면 포기하고 다음 서버로) */
+async function ask(url: string, query: string, usePost: boolean): Promise<{ elements?: El[]; remark?: string }> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20000)
+  try {
+    const res = usePost
+      ? await fetch(url, { method: 'POST', body: new URLSearchParams({ data: query }), signal: ctrl.signal })
+      : await fetch(`${url}?data=${encodeURIComponent(query)}`, { signal: ctrl.signal })
+    const text = await res.text()
+    if (!res.ok) throw new Error(`HTTP ${res.status}${text ? ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : ''}`)
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error('JSON 아님: ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120))
+    }
+  } catch (e) {
+    const err = e as Error
+    throw new Error(err.name === 'AbortError' ? '시간 초과(20초)' : err.message || String(e))
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function findDiveSites(lat: number, lon: number, radiusKm: number, lang: string): Promise<{ sites: OsmDiveSite[]; cached: boolean }> {
   const key = `${KEY}${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm}`
   const r = Math.round(radiusKm * 1000)
-  const q = `[out:json][timeout:25];(nwr(around:${r},${lat},${lon})["sport"="scuba_diving"];nwr(around:${r},${lat},${lon})["leisure"="dive_site"];nwr(around:${r},${lat},${lon})["sport"="free_diving"];);out center tags 150;`
-  let lastErr: unknown
+  const a = `(around:${r},${lat.toFixed(5)},${lon.toFixed(5)})`
+  // Overpass QL 표준 순서: out [상세도] [위치] [개수]
+  const query = `[out:json][timeout:25];(nwr${a}["sport"="scuba_diving"];nwr${a}["leisure"="dive_site"];nwr${a}["sport"="free_diving"];);out tags center 150;`
+  const errors: string[] = []
   for (const url of ENDPOINTS) {
-    try {
-      const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }) })
-      if (!res.ok) throw new Error('osm ' + res.status)
-      const json = await res.json()
-      const sites = parse(json.elements ?? [], lang)
+    // 서버마다 POST, 안 되면 GET 한 번 더
+    for (const usePost of [true, false]) {
       try {
-        localStorage.setItem(key, JSON.stringify(sites))
-      } catch {
-        /* 무시 */
+        const json = await ask(url, query, usePost)
+        if (json.remark && !json.elements?.length) throw new Error('서버 메시지: ' + json.remark.slice(0, 120))
+        const sites = parse(json.elements ?? [], lang)
+        try {
+          localStorage.setItem(key, JSON.stringify(sites))
+        } catch {
+          /* 무시 */
+        }
+        return { sites, cached: false }
+      } catch (e) {
+        errors.push(`${new URL(url).hostname} ${usePost ? 'POST' : 'GET'}: ${(e as Error).message}`)
       }
-      return { sites, cached: false }
-    } catch (e) {
-      lastErr = e
     }
   }
   // 인터넷이 안 되면 예전에 찾아 둔 결과
@@ -48,7 +75,7 @@ export async function findDiveSites(lat: number, lon: number, radiusKm: number, 
   } catch {
     /* 무시 */
   }
-  throw lastErr ?? new Error('osm failed')
+  throw new Error(errors.join('\n'))
 }
 
 interface El {

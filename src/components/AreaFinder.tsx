@@ -36,6 +36,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
   const [radius, setRadius] = useState(15)
   const [osm, setOsm] = useState<OsmDiveSite[] | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [errMsg, setErrMsg] = useState('')
   const [cached, setCached] = useState(false)
   const [manual, setManual] = useState('')
 
@@ -54,7 +55,8 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
       setOsm(res.sites)
       setCached(res.cached)
       setState('idle')
-    } catch {
+    } catch (e) {
+      setErrMsg((e as Error).message)
       setState('error')
     }
   }
@@ -145,11 +147,17 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
               ))}
             </div>
 
-            {state === 'loading' && <p className="muted small">{pick('OpenStreetMap에서 다이빙 포인트 찾는 중…', 'Searching OpenStreetMap…')}</p>}
+            {state === 'loading' && <p className="muted small">{pick('OpenStreetMap에서 다이빙 포인트 찾는 중… (최대 20초씩, 서버 3곳 차례로)', 'Searching OpenStreetMap…')}</p>}
             {state === 'error' && (
               <p className="import-error small">
                 {pick('포인트를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.', 'Could not load. Check your connection and retry.')}{' '}
                 <button className="link-btn" onClick={() => search()}>{pick('다시 시도', 'Retry')}</button>
+                {errMsg && (
+                  <details className="err-detail">
+                    <summary>{pick('오류 자세히 (스크린샷을 보내 주세요)', 'Error details')}</summary>
+                    <pre>{errMsg}</pre>
+                  </details>
+                )}
               </p>
             )}
             {cached && <p className="muted small">{pick('📥 오프라인: 예전에 찾아 둔 결과예요.', '📥 Offline: showing saved results.')}</p>}
