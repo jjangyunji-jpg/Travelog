@@ -27,6 +27,7 @@ import { SPECIES } from './data/species'
 import speciesPhotos from './data/speciesPhotos.json'
 import { prefetchImages } from './inat'
 import { useSync } from './sync/useSync'
+import { mergeData } from './sync/merge'
 import { getClientId, setClientId } from './sync/drive'
 
 type Tab = 'map' | 'journal' | 'dive' | 'stats' | 'list'
@@ -80,7 +81,7 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, replaceAll } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
@@ -203,7 +204,9 @@ function Main() {
   const doImport = async (f: File | undefined) => {
     if (!f) return
     try {
-      replaceAll(await importBackup(f))
+      // 덮어쓰지 않고 합치기: 이 기기에 있던 기록도 유지, 같은 기록은 더 최근 것
+      const imported = await importBackup(f)
+      setData((cur) => mergeData(cur, imported))
       alert(t.restoreDone)
       setModal(null)
     } catch {
