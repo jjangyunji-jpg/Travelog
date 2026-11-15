@@ -1,6 +1,7 @@
 import { COUNTRY_BY_CODE, flagEmoji } from '../data/countries'
 import { useI18n } from '../i18n'
 import { usePhotoUrl, type Trip } from '../store'
+import { coverPhoto, isOngoing, previewNote, writtenDays } from '../trip'
 
 export function formatRange(t: Trip, lang: string) {
   const fmt = (d: string) =>
@@ -20,7 +21,7 @@ export default function TripCard({ trip, onClick, showCountry = true }: { trip: 
   const c = COUNTRY_BY_CODE[trip.country]
   return (
     <button className="trip-card" onClick={onClick}>
-      {trip.photoIds[0] ? <Thumb id={trip.photoIds[0]} className="trip-cover" /> : <div className="trip-cover flag">{flagEmoji(trip.country)}</div>}
+      {coverPhoto(trip) ? <Thumb id={coverPhoto(trip)!} className="trip-cover" /> : <div className="trip-cover flag">{flagEmoji(trip.country)}</div>}
       <div className="trip-info">
         {showCountry && (
           <div className="trip-country">
@@ -29,8 +30,12 @@ export default function TripCard({ trip, onClick, showCountry = true }: { trip: 
           </div>
         )}
         <div className="trip-title">{trip.title || trip.city || cName(c)}</div>
-        <div className="trip-date">{formatRange(trip, lang)}</div>
-        {trip.note && <div className="trip-note">{trip.note}</div>}
+        <div className="trip-date">
+          {formatRange(trip, lang)}
+          {writtenDays(trip) > 0 && <span className="day-badge">📔 {lang === 'ko' ? `${writtenDays(trip)}일 기록` : `${writtenDays(trip)} days`}</span>}
+          {isOngoing(trip) && <span className="day-badge now">✈️ {lang === 'ko' ? '여행 중' : 'Now'}</span>}
+        </div>
+        {previewNote(trip) && <div className="trip-note">{previewNote(trip)}</div>}
       </div>
     </button>
   )

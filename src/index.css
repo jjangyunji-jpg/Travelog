@@ -499,3 +499,26 @@ h2, h3 { margin: 0; }
 .dur-step button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--surface); font-size: 16px; }
 .dur-step button:disabled { opacity: .4; }
 .dur-step b { min-width: 72px; text-align: center; font-size: 14px; }
+
+/* ---------- 하루하루 일기 ---------- */
+.day-badge { margin-left: 6px; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--muted); white-space: nowrap; }
+.day-badge.now { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.day-list { list-style: none; margin: 0; padding: 0 0 0 14px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--line); }
+.day-list li { position: relative; }
+.day-list li::before { content: ''; position: absolute; left: -21px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); }
+.day-list li.written::before { background: var(--visited); border-color: var(--visited); }
+.day-list li.today::before { background: var(--primary); border-color: var(--primary); }
+.day-list li.future { opacity: .6; }
+.day-item { width: 100%; border: 0; background: var(--bg); border-radius: 12px; padding: 10px 12px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.day-list li.today .day-item { outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent); }
+.day-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.day-head .spacer { flex: 1; }
+.day-action { font-size: 15px; color: var(--primary); }
+.day-note { margin: 0; white-space: pre-wrap; line-height: 1.6; font-size: 14px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.day-photos { display: flex; gap: 6px; align-items: center; }
+.day-photo { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; }
+.day-photos .more { font-size: 13px; color: var(--muted); }
+.now-banner { display: flex; align-items: center; gap: 12px; border: 0; border-radius: var(--radius); padding: 12px 14px; text-align: left; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 60%, #5fd3c4)); color: #fff; }
+.now-banner > span:first-child { font-size: 26px; }
+.now-text { display: flex; flex-direction: column; gap: 2px; }
+.now-text small { opacity: .9; }

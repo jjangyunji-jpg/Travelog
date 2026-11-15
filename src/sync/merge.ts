@@ -48,7 +48,17 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
     statuses,
     statusTs,
     deleted,
-    trips: mergeList(local.trips, remote.trips, deleted, 'trip:'),
+    trips: mergeList(local.trips, remote.trips, deleted, 'trip:').map((t) => {
+      // 하루 일기는 날짜별로 더 최근 것을 (두 기기에서 다른 날을 써도 둘 다 유지)
+      const other = [...local.trips, ...remote.trips].filter((x) => x.id === t.id)
+      const byDate = new Map<string, NonNullable<typeof t.days>[number]>()
+      for (const x of other)
+        for (const day of x.days ?? []) {
+          const cur = byDate.get(day.date)
+          if (!cur || (day.updatedAt ?? 0) > (cur.updatedAt ?? 0)) byDate.set(day.date, day)
+        }
+      return byDate.size ? { ...t, days: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) } : t
+    }),
     dives: mergeList(local.dives, remote.dives, deleted, 'dive:'),
     customSpots: mergeList(local.customSpots, remote.customSpots, deleted, 'spot:'),
     diveOffset: remoteNewerOffset ? remote.diveOffset : local.diveOffset,
@@ -60,7 +70,8 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
 }
 
 /** 데이터가 참조하는 모든 사진 id */
-export const referencedPhotos = (d: AppData) => new Set([...d.trips, ...d.dives].flatMap((r) => r.photoIds))
+export const referencedPhotos = (d: AppData) =>
+  new Set([...d.trips, ...d.dives, ...d.trips.flatMap((t) => t.days ?? [])].flatMap((r) => r.photoIds))
 
 /** 동기화가 필요한 변경인지 비교하기 위한 지문 */
 export const fingerprint = (d: AppData) => JSON.stringify(d)

@@ -13,9 +13,40 @@ export interface PlaceResult extends Place {
   countryCode?: string
 }
 
+import { KNOWN_PLACES, normName } from './data/places'
+import { BUILTIN_SPOTS } from './data/diveSpots'
+
 const KEY = 'travelog:geo:'
 
-export async function searchPlaces(q: string, lang: string, countryCode?: string, count = 6): Promise<PlaceResult[]> {
+/** 나라가 맞는지 (괌·사이판처럼 해외 영토는 속한 나라도 인정) */
+const countryOk = (cc: string | undefined, parent: string | undefined, want?: string) => !want || cc === want || parent === want
+
+/** 1) 앱에 내장된 여행지 사전 (오프라인·즉시) */
+export function knownPlaces(q: string, country?: string, limit = 6): PlaceResult[] {
+  const n = normName(q)
+  if (!n) return []
+  const stripped = n.replace(/(섬|도|시|군)$/, '')
+  const out: PlaceResult[] = []
+  for (const p of KNOWN_PLACES) {
+    if (!countryOk(p.country, p.parent, country)) continue
+    const names = p.names.map(normName)
+    const exact = names.some((x) => x === n || x === stripped)
+    const prefix = !exact && n.length >= 2 && names.some((x) => x.startsWith(n))
+    if (exact || prefix) out.push({ name: p.names[0], lat: p.lat, lon: p.lon, countryCode: p.country, exact } as PlaceResult & { exact: boolean })
+  }
+  return (out as (PlaceResult & { exact: boolean })[]).sort((a, b) => Number(b.exact) - Number(a.exact)).slice(0, limit)
+}
+
+/** 3) 다이빙 스팟 목록의 이름 (예: '모알보알' → 모알보알 정어리 떼) */
+function spotPlaces(q: string, country?: string): PlaceResult[] {
+  const n = normName(q)
+  if (n.length < 2) return []
+  return BUILTIN_SPOTS.filter((s) => (!country || s.country === country) && [s.nameKo, s.nameEn].some((x) => normName(x).includes(n)))
+    .slice(0, 3)
+    .map((s) => ({ name: q.trim(), lat: s.lat, lon: s.lon, countryCode: s.country }))
+}
+
+async function searchOnline(q: string, lang: string, countryCode?: string, count = 6): Promise<PlaceResult[]> {
   const query = q.trim()
   if (query.length < 1) return []
   const params = new URLSearchParams({ name: query, count: String(count), language: lang, format: 'json' })
@@ -47,6 +78,32 @@ export async function searchPlaces(q: string, lang: string, countryCode?: string
   return list
 }
 
+/**
+ * 도시 검색: 내장 사전 → 지명 검색(한국어) → 이름 바꿔 다시('○○시', '섬/도' 떼기) → 다이빙 스팟 이름
+ * 인터넷 오류는 throw (나중에 다시 시도하도록)
+ */
+export async function searchPlaces(q: string, lang: string, countryCode?: string, count = 6): Promise<PlaceResult[]> {
+  const known = knownPlaces(q, countryCode, count)
+  let online: PlaceResult[] = []
+  let failed: unknown
+  const tries = [q.trim(), q.trim().replace(/(섬|도|시)$/, ''), q.trim() + ' 시'].filter((x, i, a) => x.length >= 1 && a.indexOf(x) === i)
+  for (const t of tries) {
+    if (known.some((k) => (k as PlaceResult & { exact?: boolean }).exact)) break
+    try {
+      online = await searchOnline(t, lang, countryCode, count)
+    } catch (e) {
+      failed = e
+      break
+    }
+    if (online.length) break
+  }
+  const merged = [...known]
+  for (const r of online) if (!merged.some((m) => Math.abs(m.lat - r.lat) < 0.05 && Math.abs(m.lon - r.lon) < 0.05)) merged.push(r)
+  if (!merged.length) merged.push(...spotPlaces(q, countryCode))
+  if (!merged.length && failed) throw failed
+  return merged.slice(0, count)
+}
+
 /** "도쿄, 요코하마" 같은 도시 문자열을 나눔 */
 export const splitCities = (s: string) =>
   s
@@ -55,11 +112,15 @@ export const splitCities = (s: string) =>
     .filter(Boolean)
 
 /** 예전 기록의 도시 이름들을 좌표로 (그 나라 안에서 첫 결과) */
-export async function geocodeCities(cityText: string, country: string, lang: string): Promise<Place[]> {
-  const out: Place[] = []
+export async function geocodeCities(cityText: string, country: string, lang: string): Promise<Place[] & { failed?: boolean }> {
+  const out: Place[] & { failed?: boolean } = []
   for (const name of splitCities(cityText)) {
-    const r = (await searchPlaces(name, lang, country, 1).catch(() => []))[0]
-    if (r) out.push({ name, lat: r.lat, lon: r.lon })
+    try {
+      const r = (await searchPlaces(name, lang, country, 1))[0]
+      if (r) out.push({ name, lat: r.lat, lon: r.lon })
+    } catch {
+      out.failed = true // 인터넷 문제 → 나중에 다시
+    }
   }
   return out
 }

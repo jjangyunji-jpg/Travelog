@@ -4,6 +4,13 @@ import type { DiveSpot } from './data/diveSpots'
 
 export type Status = 'visited' | 'wish'
 
+export interface TripDay {
+  date: string
+  note: string
+  photoIds: string[]
+  updatedAt?: number
+}
+
 export interface Trip {
   id: string
   country: string
@@ -13,6 +20,8 @@ export interface Trip {
   endDate: string
   note: string
   photoIds: string[]
+  /** 하루하루 일기 */
+  days?: TripDay[]
   /** 간 도시 좌표 (지도 '도시 보기'에 점으로 표시) */
   places?: { name: string; lat: number; lon: number }[]
   createdAt: number
@@ -166,6 +175,7 @@ export function useAppData() {
     setData((d) => {
       const trip = d.trips.find((t) => t.id === id)
       trip?.photoIds.forEach((p) => del(photoKey(p)))
+      trip?.days?.forEach((day) => day.photoIds.forEach((p) => del(photoKey(p))))
       return { ...d, trips: d.trips.filter((t) => t.id !== id), deleted: { ...d.deleted, ['trip:' + id]: Date.now() } }
     })
   }, [])
@@ -217,6 +227,24 @@ export function useAppData() {
     [],
   )
 
+  /** 하루 일기 저장 (같은 날짜는 덮어씀, 비면 지움) */
+  const saveTripDay = useCallback((tripId: string, day: TripDay) => {
+    setData((d) => {
+      const now = Date.now()
+      return {
+        ...d,
+        trips: d.trips.map((t) => {
+          if (t.id !== tripId) return t
+          const rest = (t.days ?? []).filter((x) => x.date !== day.date)
+          const empty = !day.note.trim() && !day.photoIds.length
+          // 지운 날도 시각을 남겨 다른 기기와 합칠 때 되살아나지 않게
+          const days = [...rest, empty ? { ...day, note: '', photoIds: [], updatedAt: now } : { ...day, updatedAt: now }].sort((a, b) => a.date.localeCompare(b.date))
+          return { ...t, days, updatedAt: now }
+        }),
+      }
+    })
+  }, [])
+
   /** 여러 여행 기록 일부 수정 (도시 좌표 자동 채우기 등) */
   const patchTrips = useCallback((patches: Record<string, Partial<Trip>>) => {
     setData((d) => {
@@ -235,7 +263,7 @@ export function useAppData() {
 
   const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */
@@ -296,7 +324,7 @@ const blobToDataUrl = (b: Blob) =>
 
 export async function exportBackup(data: AppData) {
   const photos: Record<string, string> = {}
-  for (const t of [...data.trips, ...data.dives])
+  for (const t of [...data.trips, ...data.dives, ...data.trips.flatMap((x) => x.days ?? [])])
     for (const p of t.photoIds) {
       const b = await getPhoto(p)
       if (b) photos[p] = await blobToDataUrl(b)

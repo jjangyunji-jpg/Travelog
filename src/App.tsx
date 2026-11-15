@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { COUNTRY_BY_CODE } from './data/countries'
 import { I18nContext, useI18n, type Lang } from './i18n'
 import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } from './store'
 import { computeStats, visitCounts, visitLevel } from './stats'
@@ -8,6 +9,8 @@ import WorldMap, { type MapMarker, type MapMode, type TravelView } from './compo
 import CountrySheet from './components/CountrySheet'
 import TripForm from './components/TripForm'
 import TripDetail from './components/TripDetail'
+import DayForm, { fmtDay } from './components/DayForm'
+import { dayNumber, isOngoing, todayStr } from './trip'
 import StatsView from './components/StatsView'
 import CountryListView from './components/CountryListView'
 import JournalView from './components/JournalView'
@@ -30,6 +33,7 @@ type Modal =
   | { kind: 'country'; code: string }
   | { kind: 'form'; trip?: Trip; country?: string; back?: string }
   | { kind: 'trip'; trip: Trip; back?: string }
+  | { kind: 'day'; tripId: string; date: string; back?: Modal }
   | { kind: 'diveCountry'; code: string }
   | { kind: 'spot'; id: string }
   | { kind: 'diveForm'; dive?: Dive; country?: string; spotId?: string; plan?: Plan; back?: Modal }
@@ -75,7 +79,7 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, replaceAll } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, replaceAll } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
@@ -117,6 +121,13 @@ function Main() {
   const geoTried = useRef(new Set<string>())
   const [, setGeoRound] = useState(0)
   const [geoBusy, setGeoBusy] = useState(false)
+  // 인터넷이 다시 연결되면 위치 찾기 재시도
+  const [geoRetry, setGeoRetry] = useState(0)
+  useEffect(() => {
+    const on = () => setGeoRetry((n) => n + 1)
+    window.addEventListener('online', on)
+    return () => window.removeEventListener('online', on)
+  }, [])
   useEffect(() => {
     if (mapMode !== 'travel' || travelView !== 'city' || !navigator.onLine) return
     // 좌표가 없는 도시 이름이 하나라도 있는 기록
@@ -136,8 +147,10 @@ function Main() {
           if (p) patches[t.id] = { places: [p], city: p.name }
           continue
         }
-        const found = await geocodeCities(missing(t).join(','), t.country, lang).catch(() => [])
+        const found = await geocodeCities(missing(t).join(','), t.country, lang)
         if (found.length) patches[t.id] = { places: [...(t.places ?? []), ...found] }
+        // 인터넷 문제로 못 찾은 이름이 있으면 다음에 다시 시도
+        if (found.failed) geoTried.current.delete(t.id + t.city + t.title)
       }
       if (alive && Object.keys(patches).length) patchTrips(patches)
       if (alive) setGeoRound((n) => n + 1)
@@ -147,7 +160,7 @@ function Main() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapMode, travelView, data.trips])
+  }, [mapMode, travelView, data.trips, geoRetry])
 
   // 지도에 점이 없는 여행 (도시를 못 찾았거나 비어 있음)
   const noCityTrips = geoBusy ? [] : data.trips.filter((tr) => !tr.places?.length && geoTried.current.has(tr.id + tr.city + tr.title))
@@ -212,6 +225,8 @@ function Main() {
   }
 
   const recentDives = sortDivesDesc(data.dives).slice(0, 3)
+  const ongoing = data.trips.find((x) => isOngoing(x))
+  const cNameOf = (code: string) => (lang === 'ko' ? COUNTRY_BY_CODE[code]?.nameKo : COUNTRY_BY_CODE[code]?.nameEn) ?? code
 
   // 생물 도감 사진을 모두 기기에 저장 (작은 사진 + 썸네일)
   const photoUrls = useMemo(
@@ -252,6 +267,15 @@ function Main() {
               <button className={mapMode === 'travel' ? 'on' : ''} onClick={() => setMapMode('travel')}>🌍 {t.travel}</button>
               <button className={mapMode === 'dive' ? 'on dive' : ''} onClick={() => setMapMode('dive')}>🤿 {t.dive}</button>
             </div>
+            {mapMode === 'travel' && ongoing && (
+              <button className="now-banner" onClick={() => setModal({ kind: 'day', tripId: ongoing.id, date: todayStr() })}>
+                <span>✈️</span>
+                <span className="now-text">
+                  <b>{lang === 'ko' ? '지금 여행 중' : 'On a trip'} · {ongoing.title || ongoing.city || cNameOf(ongoing.country)} · Day {dayNumber(ongoing, todayStr())}</b>
+                  <small>{fmtDay(todayStr(), lang)} — {lang === 'ko' ? '오늘 일기 쓰기 ›' : "Write today's entry ›"}</small>
+                </span>
+              </button>
+            )}
             {mapMode === 'travel' ? (
               <div className="summary">
                 <div className="sum-item"><b>{stats.visited.length}</b><span>{t.visitedCountries}</span></div>
@@ -407,11 +431,27 @@ function Main() {
           onClose={() => (modal.trip ? setModal({ kind: 'trip', trip: modal.trip, back: modal.back }) : backTo(modal.back))}
         />
       )}
-      {modal?.kind === 'trip' && (
-        <TripDetail
-          trip={modal.trip}
-          onEdit={() => setModal({ kind: 'form', trip: modal.trip, back: modal.back })}
-          onClose={() => backTo(modal.back)}
+      {modal?.kind === 'trip' && (() => {
+        // 하루 일기를 저장하면 바로 보이도록 최신 기록으로
+        const live = data.trips.find((x) => x.id === modal.trip.id) ?? modal.trip
+        return (
+          <TripDetail
+            trip={live}
+            onEdit={() => setModal({ kind: 'form', trip: live, back: modal.back })}
+            onDay={(date) => setModal({ kind: 'day', tripId: live.id, date, back: { kind: 'trip', trip: live, back: modal.back } })}
+            onClose={() => backTo(modal.back)}
+          />
+        )
+      })()}
+      {modal?.kind === 'day' && data.trips.some((x) => x.id === modal.tripId) && (
+        <DayForm
+          trip={data.trips.find((x) => x.id === modal.tripId)!}
+          date={modal.date}
+          onSave={(day) => {
+            saveTripDay(modal.tripId, day)
+            setModal(modal.back ?? null)
+          }}
+          onClose={() => setModal(modal.back ?? null)}
         />
       )}
 
