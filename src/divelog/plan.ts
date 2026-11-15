@@ -143,3 +143,9 @@ export function planDive(depth: number, totalMin: number, gas: string): PlanResu
     tooShort,
   }
 }
+
+/** 컴퓨터 그래프가 없을 때: 최대 수심·시간으로 그린 대략 그래프 */
+export function approxProfile(d: { maxDepth?: number; bottomTime?: number; profile?: [number, number][] }): [number, number][] | undefined {
+  if (d.profile?.length || d.maxDepth == null || d.bottomTime == null || d.maxDepth <= 0 || d.bottomTime < 5) return undefined
+  return planDive(d.maxDepth, d.bottomTime, 'air').curve
+}

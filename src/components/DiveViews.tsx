@@ -9,7 +9,7 @@ import type { AppData, Dive } from '../store'
 import { diveStats, fmtMinutes, isPlanned, sortDivesDesc, spotMap } from '../dive'
 import Sheet from './Sheet'
 import ProfileChart from './ProfileChart'
-import { planDive } from '../divelog/plan'
+import { approxProfile, planDive } from '../divelog/plan'
 import { BRIEF_TOTAL } from '../divelog/briefing'
 import { Thumb } from './TripCard'
 
@@ -139,15 +139,20 @@ export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
             )}
           </div>
         )}
-        {(dive.profile?.length || dive.plan) && (
-          <ProfileChart
-            title={dive.profile?.length ? undefined : pick('다이빙 계획', 'Dive plan')}
-            series={[
-              ...(dive.plan ? [{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' as const }] : []),
-              ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : []),
-            ]}
-          />
-        )}
+        {(() => {
+          const approx = approxProfile(dive)
+          const actual = dive.profile?.length ? dive.profile : approx
+          if (!actual && !dive.plan) return null
+          return (
+            <ProfileChart
+              title={dive.profile?.length ? undefined : approx ? pick('대략 그래프 (수심·시간으로 그림)', 'Approximate profile (from depth & time)') : pick('다이빙 계획', 'Dive plan')}
+              series={[
+                ...(dive.plan ? [{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' as const }] : []),
+                ...(actual ? [{ points: actual, kind: 'actual' as const }] : []),
+              ]}
+            />
+          )
+        })()}
         <div className="log-grid">
           {rows.filter((r) => r[1]).map(([k, v]) => (
             <div key={k}><span>{k}</span><b>{v}</b></div>

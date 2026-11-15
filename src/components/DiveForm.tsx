@@ -9,7 +9,8 @@ import CountrySelect from './CountrySelect'
 import { BRIEF_TOTAL } from '../divelog/briefing'
 import { parseDiveFile } from '../divelog/parse'
 import ProfileChart from './ProfileChart'
-import { planDive } from '../divelog/plan'
+import { approxProfile, planDive } from '../divelog/plan'
+import { COMPUTERS, computerInfo } from '../data/computers'
 import MarinePicker from './MarinePicker'
 import { allSpots } from '../dive'
 import Sheet from './Sheet'
@@ -288,6 +289,9 @@ export default function DiveForm({ data, initial, country, spotId, plan, onSave,
           <NumField label={t.endBar} unit="bar" step={10} value={dive.endBar} onChange={(v) => up({ endBar: v })} />
         </div>
         {used != null && <div className="muted small">{t.airUsed}: {used} bar</div>}
+        {!dive.plan && !dive.profile?.length && approxProfile(dive) && (
+          <ProfileChart title={pick('대략 그래프 (수심·시간으로 그림)', 'Approximate profile')} series={[{ points: approxProfile(dive)!, kind: 'actual' }]} />
+        )}
         {dive.plan && (dive.maxDepth != null || dive.bottomTime != null || dive.profile?.length) && (
           <div className="vs">
             <b>{pick('계획 vs 실제', 'Plan vs actual')}</b>
@@ -306,7 +310,13 @@ export default function DiveForm({ data, initial, country, spotId, plan, onSave,
                 🫧 {pick('출수 압력', 'Surfaced with')} {dive.endBar} bar {dive.endBar < 50 ? pick('(50 bar 미만)', '(below 50 bar)') : '✓'}
               </span>
             )}
-            <ProfileChart series={[{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' }, ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : [])]} />
+            <ProfileChart
+              title={dive.profile?.length ? undefined : pick('대략 그래프 (수심·시간으로 그림)', 'Approximate profile')}
+              series={[
+                { points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' },
+                ...((dive.profile?.length ? dive.profile : approxProfile(dive)) ? [{ points: (dive.profile?.length ? dive.profile : approxProfile(dive))!, kind: 'actual' as const }] : []),
+              ]}
+            />
           </div>
         )}
 
@@ -329,6 +339,20 @@ export default function DiveForm({ data, initial, country, spotId, plan, onSave,
             </select>
           </label>
         </div>
+        <label>
+          <span>⌚ {pick('다이빙 컴퓨터 (대여 모델)', 'Dive computer (rental model)')}</span>
+          <input list="computer-models" value={dive.computer ?? ''} placeholder={pick('예: Suunto Zoop Novo', 'e.g. Suunto Zoop Novo')} onChange={(e) => up({ computer: e.target.value })} />
+          <datalist id="computer-models">
+            {COMPUTERS.map((c) => <option key={c.name} value={c.name} />)}
+          </datalist>
+          {computerInfo(dive.computer) && (
+            <small className={computerInfo(dive.computer)!.ble ? 'ble yes' : 'ble no'}>
+              {computerInfo(dive.computer)!.ble
+                ? pick('📶 블루투스가 있는 모델이에요 (직접 연결은 모델별로 준비 중)', '📶 Has Bluetooth (direct download coming per model)')
+                : pick('🔌 블루투스가 없는 모델이에요. 화면의 최대 수심·시간을 입력하면 대략 그래프를 그려 드려요', '🔌 No Bluetooth. Enter max depth & time from the screen for an approximate profile')}
+            </small>
+          )}
+        </label>
         <span className="field-label">{t.entry}</span>
         <div className="seg">
           {(['boat', 'shore'] as const).map((k) => (

@@ -454,3 +454,6 @@ h2, h3 { margin: 0; }
 .vs .profile { padding: 0; background: transparent; }
 .debrief-view p { margin: 6px 0; line-height: 1.6; }
 .debrief-view b { margin-right: 6px; }
+.ble { font-size: 12px; line-height: 1.5; }
+.ble.yes { color: var(--dive); }
+.ble.no { color: var(--muted); }
