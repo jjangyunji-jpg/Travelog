@@ -8,6 +8,23 @@ import PlacePicker from './PlacePicker'
 import { splitCities } from '../geo'
 import { Thumb } from './TripCard'
 
+const addDays = (date: string, n: number) => {
+  const d = new Date(date + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 자주 쓰는 여행 기간 [박, 한국어, 영어] */
+const DURATIONS: [number, string, string][] = [
+  [0, '당일', 'Day'],
+  [1, '1박2일', '2 days'],
+  [2, '2박3일', '3 days'],
+  [3, '3박4일', '4 days'],
+  [4, '4박5일', '5 days'],
+  [6, '1주일', '1 week'],
+  [13, '2주', '2 weeks'],
+]
+
 interface Props {
   initial?: Trip
   country?: string
@@ -17,7 +34,7 @@ interface Props {
 }
 
 export default function TripForm({ initial, country, onSave, onDelete, onClose }: Props) {
-  const { t, cName } = useI18n()
+  const { t, cName, pick } = useI18n()
   const today = new Date().toISOString().slice(0, 10)
   const [trip, setTrip] = useState<Trip>(
     initial ?? {
@@ -36,6 +53,9 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
   const added = useRef<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const up = (patch: Partial<Trip>) => setTrip((x) => ({ ...x, ...patch }))
+  // 기간(박): 종료일 - 시작일
+  const nights = trip.startDate && trip.endDate ? Math.max(0, Math.round((Date.parse(trip.endDate) - Date.parse(trip.startDate)) / 86400000)) : 0
+  const setNights = (n: number) => trip.startDate && up({ endDate: addDays(trip.startDate, n) })
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return
@@ -97,12 +117,34 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
         <div className="row">
           <label>
             <span>{t.start}</span>
-            <input type="date" value={trip.startDate} onChange={(e) => up({ startDate: e.target.value })} />
+            <input
+              type="date"
+              value={trip.startDate}
+              onChange={(e) => {
+                const start = e.target.value
+                // 시작일을 옮기면 기간(N박)을 유지한 채 종료일도 같이 이동
+                up({ startDate: start, endDate: start ? addDays(start, nights) : trip.endDate })
+              }}
+            />
           </label>
           <label>
             <span>{t.end}</span>
             <input type="date" value={trip.endDate} min={trip.startDate} onChange={(e) => up({ endDate: e.target.value })} />
           </label>
+        </div>
+        <div className="duration">
+          <div className="dur-chips">
+            {DURATIONS.map(([n, ko, en]) => (
+              <button type="button" key={n} className={nights === n ? 'pill on' : 'pill'} onClick={() => setNights(n)}>
+                {pick(ko, en)}
+              </button>
+            ))}
+          </div>
+          <div className="dur-step">
+            <button type="button" aria-label="-1" onClick={() => setNights(Math.max(0, nights - 1))} disabled={nights <= 0}>－</button>
+            <b>{nights === 0 ? pick('당일', 'Day trip') : pick(`${nights}박 ${nights + 1}일`, `${nights} night${nights > 1 ? 's' : ''}`)}</b>
+            <button type="button" aria-label="+1" onClick={() => setNights(nights + 1)}>＋</button>
+          </div>
         </div>
         <label>
           <span>{t.note}</span>
