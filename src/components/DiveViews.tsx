@@ -143,7 +143,7 @@ export function DiveDetail({ dive, no, spot, custom = {}, onEdit, onClose }: {
           <ProfileChart
             title={dive.profile?.length ? undefined : pick('다이빙 계획', 'Dive plan')}
             series={[
-              ...(dive.plan ? [{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).points, kind: 'plan' as const }] : []),
+              ...(dive.plan ? [{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' as const }] : []),
               ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : []),
             ]}
           />

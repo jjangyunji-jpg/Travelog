@@ -22,8 +22,82 @@ export function ndlMinutes(depth: number, gas: string): number | undefined {
 /** 산소분압 1.4 기준 최대 운용 수심 */
 export const modMeters = (gas: string, ppo2 = 1.4) => Math.floor((ppo2 / o2Fraction(gas) - 1) * 10 * 10) / 10
 
+/** 기준점들을 부드럽게 잇기 (단조 3차 보간: 기준점 사이에서 값이 넘치지 않음) */
+function spline(keys: [number, number][], stepMin = 0.25): [number, number][] {
+  const n = keys.length
+  const xs = keys.map((k) => k[0])
+  const ys = keys.map((k) => k[1])
+  const h = xs.slice(1).map((x, i) => x - xs[i])
+  const delta = h.map((hi, i) => (ys[i + 1] - ys[i]) / hi)
+  const m = new Array(n).fill(0)
+  m[0] = delta[0]
+  m[n - 1] = delta[n - 2]
+  for (let i = 1; i < n - 1; i++) {
+    if (delta[i - 1] * delta[i] <= 0) m[i] = 0
+    else {
+      const w1 = 2 * h[i] + h[i - 1]
+      const w2 = h[i] + 2 * h[i - 1]
+      m[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+    }
+  }
+  const out: [number, number][] = []
+  for (let i = 0; i < n - 1; i++) {
+    const steps = Math.max(2, Math.ceil(h[i] / stepMin))
+    for (let j = 0; j < steps; j++) {
+      const t = j / steps
+      const t2 = t * t
+      const t3 = t2 * t
+      const y = (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h[i] * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h[i] * m[i + 1]
+      out.push([xs[i] + t * h[i], y])
+    }
+  }
+  out.push(keys[n - 1])
+  return out
+}
+
+/**
+ * 실제 다이빙처럼 보이는 예상 그래프
+ * 천천히 하강 → 가장 깊은 곳을 먼저 → 점점 얕은 곳으로 이동(멀티레벨) → 안전정지 → 출수
+ * (그림용. 무감압 한계 계산은 계획 수심에 계속 머문다고 보수적으로 가정)
+ */
+function naturalCurve(depth: number, totalMin: number, stop: number): [number, number][] {
+  const end = totalMin
+  const dEnd = Math.max(1.2, depth / 8) // 압력평형하며 천천히 하강
+  let keys: [number, number][]
+  if (depth > stop + 2) {
+    const stopStart = end - stop / 9 - 3
+    const B = Math.max(1, stopStart - 1.5 - dEnd)
+    keys = [
+      [0, 0],
+      [dEnd, depth],
+      [dEnd + B * 0.28, depth * 0.96],
+      [dEnd + B * 0.55, depth * 0.8],
+      [dEnd + B * 0.8, Math.max(stop + 3, depth * 0.62)],
+      [dEnd + B, Math.max(stop + 2, depth * 0.45)],
+      [stopStart, stop],
+      [stopStart + 3, stop],
+      [end, 0],
+    ]
+  } else {
+    keys = [[0, 0], [dEnd, depth], [end * 0.5, depth * 0.9], [end - 1, depth * 0.7], [end, 0]]
+  }
+  const pts = spline(keys)
+  const stopFrom = depth > stop + 2 ? end - stop / 9 - 3 : end
+  return pts.map(([m, d]) => {
+    // 바닥 구간에는 유영하며 오르내리는 작은 물결
+    const amp = 0.1 + depth * 0.012
+    const fade = Math.min(1, (m - dEnd) / 2, (stopFrom - 1.2 - m) / 2)
+    // 0~amp 사이의 매끄러운 물결 (위쪽으로만 → 최대 수심은 넘지 않음)
+    const wave = m > dEnd && m < stopFrom - 1.2 ? (fade * amp * (2 + 1.2 * Math.sin(m * 1.1) + 0.8 * Math.sin(m * 2.6 + 1))) / 4 : 0
+    const v = Math.min(depth, Math.max(0, d - Math.max(0, wave)))
+    return [Math.round(m * 60), Math.round(v * 10) / 10] as [number, number]
+  })
+}
+
 export interface PlanResult {
   points: [number, number][]
+  /** 실제 다이빙처럼 그린 부드러운 곡선 (그래프용) */
+  curve: [number, number][]
   descentMin: number
   bottomMin: number
   ascentMin: number
@@ -54,8 +128,10 @@ export function planDive(depth: number, totalMin: number, gas: string): PlanResu
       : [[0, 0], [t(t1), depth], [t(t2), depth], [t(t2 + depth / 9), 0]]
   const ndl = ndlMinutes(depth, gas)
   const mod = gas === 'air' ? undefined : modMeters(gas)
+  const curve = naturalCurve(depth, Math.max(totalMin, t5), STOP_DEPTH)
   return {
     points,
+    curve,
     descentMin,
     bottomMin: b,
     ascentMin,

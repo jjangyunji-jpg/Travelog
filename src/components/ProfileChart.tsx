@@ -79,7 +79,7 @@ export default function ProfileChart({ series, title }: { series: Series[]; titl
         {shown.filter((s) => s.kind === 'plan' && s !== main).map((s, i) => (
           <path key={'pl' + i} d={pathOf(s.points)} className="pf-plan" />
         ))}
-        <path d={pathOf(main.points)} className={main.kind === 'plan' ? 'pf-plan main' : 'pf-line'} />
+        <path d={pathOf(main.points)} className="pf-line" />
         <Diver x={x(diverT)} y={y(deepest[1]) - 8} s={0.9} />
         <text x={Math.min(x(deepest[0]) + 4, W - 40)} y={y(deepest[1]) + 12} className="pf-label strong">{deepest[1]}m</text>
       </svg>

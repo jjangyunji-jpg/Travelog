@@ -102,7 +102,7 @@ export default function PlanSheet({ data, spotId: initialSpot, country: initialC
 
         <ProfileChart
           title={pick('예상 수심 그래프', 'Planned profile')}
-          series={[...past.slice(0, 5).map((d) => ({ points: d.profile!, kind: 'past' as const })), { points: plan.points, kind: 'plan' as const }]}
+          series={[...past.slice(0, 5).map((d) => ({ points: d.profile!, kind: 'past' as const })), { points: plan.curve, kind: 'plan' as const }]}
         />
 
         <div className="plan-facts">

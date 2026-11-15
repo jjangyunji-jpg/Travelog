@@ -306,7 +306,7 @@ export default function DiveForm({ data, initial, country, spotId, plan, onSave,
                 🫧 {pick('출수 압력', 'Surfaced with')} {dive.endBar} bar {dive.endBar < 50 ? pick('(50 bar 미만)', '(below 50 bar)') : '✓'}
               </span>
             )}
-            <ProfileChart series={[{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).points, kind: 'plan' }, ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : [])]} />
+            <ProfileChart series={[{ points: planDive(dive.plan.depth, dive.plan.time, dive.plan.gas).curve, kind: 'plan' }, ...(dive.profile?.length ? [{ points: dive.profile, kind: 'actual' as const }] : [])]} />
           </div>
         )}
 
