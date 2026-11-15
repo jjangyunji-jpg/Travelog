@@ -19,11 +19,12 @@ export interface Plan {
   briefing?: string[]
 }
 
-export default function PlanSheet({ data, spotId: initialSpot, country: initialCountry, onStart, onClose }: {
+export default function PlanSheet({ data, spotId: initialSpot, country: initialCountry, onStart, onFindArea, onClose }: {
   data: AppData
   spotId?: string
   country?: string
   onStart: (spot: DiveSpot | undefined, country: string, plan: Plan) => void
+  onFindArea: (country: string) => void
   onClose: () => void
 }) {
   const { t, lang, pick, spotName } = useI18n()
@@ -81,6 +82,9 @@ export default function PlanSheet({ data, spotId: initialSpot, country: initialC
             </select>
           </label>
         )}
+        <button type="button" className="find-area-btn" onClick={() => onFindArea(country)}>
+          🔍 {pick('지역으로 다이빙 포인트 찾기', 'Find dive sites by area')}
+        </button>
 
         <div className="plan-inputs">
           <label>

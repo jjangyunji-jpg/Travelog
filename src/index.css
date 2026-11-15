@@ -532,3 +532,30 @@ h2, h3 { margin: 0; }
 .ms-clear { border: 0; background: var(--line); width: 22px; height: 22px; border-radius: 50%; font-size: 11px; color: var(--muted); }
 .map-search .cs-list { z-index: 6; }
 .map-search .cs-list button small { margin-left: auto; }
+
+/* ---------- 다이빙 포인트 찾기 ---------- */
+.area-finder { display: flex; flex-direction: column; gap: 12px; }
+.area-chosen { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: color-mix(in srgb, var(--dive) 8%, transparent); border-radius: 12px; padding: 10px 12px; }
+.area-chosen .link-btn { margin-left: auto; }
+.cs-list.static { position: static; margin-top: 6px; box-shadow: none; }
+.seg.radius button { padding: 8px 4px; }
+.area-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; background: var(--bg); border-radius: 12px; }
+.area-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.area-list li:last-child { border-bottom: 0; }
+.area-list .btn { flex-shrink: 0; text-decoration: none; }
+.shops summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 6px 0; }
+.manual-add { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.find-area-btn { border: 1.5px dashed var(--dive); background: color-mix(in srgb, var(--dive) 6%, transparent); color: var(--dive); font-weight: 700; border-radius: 12px; padding: 10px 12px; text-align: left; }
+
+/* ---------- 살아봤어요 ---------- */
+:root { --lived-1: #ffc9de; --lived-2: #f783ac; --lived-3: #e64980; --lived-4: #a61e4d; }
+@media (prefers-color-scheme: dark) { :root { --lived-1: #5c2a3f; --lived-2: #9c3663; --lived-3: #d6336c; --lived-4: #ff8fb8; } }
+.status-toggle { grid-template-columns: 1fr 1fr 1fr !important; }
+.status-toggle { gap: 6px !important; }
+.status-toggle button { padding: 12px 2px !important; font-size: 13.5px; white-space: nowrap; letter-spacing: -0.3px; }
+.status-toggle button.on.lived, .seg button.on.lived { background: var(--lived-3); border-color: var(--lived-3); color: #fff; }
+.tier-pick { display: flex; flex-direction: column; gap: 6px; }
+.tier-pick .seg button { font-size: 13px; padding: 9px 2px; }
+.visit-count.lived { color: #a61e4d; background: color-mix(in srgb, var(--lived-2) 22%, transparent); }
+.mini.lived.on { background: var(--lived-3); border-color: var(--lived-3); color: #fff; }
+.chip.lived { box-shadow: inset 0 0 0 1.5px var(--lived-3); }

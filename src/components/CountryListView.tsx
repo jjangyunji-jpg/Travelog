@@ -46,7 +46,11 @@ export default function CountryListView({ statuses, onSelect, onStatus }: {
                 <span className="cname">{cName(c)}</span>
               </button>
               <button className={s === 'wish' ? 'mini wish on' : 'mini wish'} onClick={() => onStatus(c.code, s === 'wish' ? null : 'wish')} aria-label={t.wish}>♡</button>
-              <button className={s === 'visited' ? 'mini visited on' : 'mini visited'} onClick={() => onStatus(c.code, s === 'visited' ? null : 'visited')} aria-label={t.visited}>✓</button>
+              {s === 'lived' ? (
+                <button className="mini lived on" onClick={() => onSelect(c.code)} aria-label={t.lived}>◆</button>
+              ) : (
+                <button className={s === 'visited' ? 'mini visited on' : 'mini visited'} onClick={() => onStatus(c.code, s === 'visited' ? null : 'visited')} aria-label={t.visited}>✓</button>
+              )}
             </li>
           )
         })}

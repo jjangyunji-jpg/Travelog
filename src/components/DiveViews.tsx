@@ -265,12 +265,13 @@ function SpotRow({ spot, count, onClick }: { spot: DiveSpot; count: number; onCl
   )
 }
 
-export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onPlan, onClose }: {
+export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onPlan, onFindArea, onClose }: {
   code: string
   data: AppData
   onOpenSpot: (id: string) => void
   onAddDive: () => void
   onPlan: () => void
+  onFindArea: () => void
   onClose: () => void
 }) {
   const { t, cName, spotName, pick } = useI18n()
@@ -297,6 +298,7 @@ export function DiveCountrySheet({ code, data, onOpenSpot, onAddDive, onPlan, on
         <button className="btn ghost" onClick={onPlan}>📋 {pick('계획', 'Plan')}</button>
         <button className="btn primary grow" onClick={onAddDive}>＋ {t.addDive}</button>
       </div>
+      <button className="find-area-btn" onClick={onFindArea}>🔍 {pick('지역으로 다이빙 포인트 찾기 (예: 샤오류추)', 'Find dive sites by area')}</button>
       {mine.length > 0 && (
         <section>
           <h3 className="sub">{t.mySpots}</h3>

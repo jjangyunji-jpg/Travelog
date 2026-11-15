@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COUNTRY_BY_CODE } from './data/countries'
 import { I18nContext, useI18n, type Lang } from './i18n'
 import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } from './store'
-import { computeStats, visitCounts, visitLevel } from './stats'
+import { computeStats, livedLevel, visitCounts, visitLevel } from './stats'
 import { geocodeCities, geocodeFromTitle, splitCities } from './geo'
 import { diveNumbers, sortDivesDesc, spotMap } from './dive'
 import WorldMap, { type MapMarker, type MapMode } from './components/WorldMap'
@@ -21,6 +21,7 @@ import { DiveCard, DiveCountrySheet, DiveDetail, DiveLogView, DiveStatsRow, Spot
 import Sheet from './components/Sheet'
 import ImportSheet from './components/ImportSheet'
 import MapSearch from './components/MapSearch'
+import AreaFinder, { type Area } from './components/AreaFinder'
 import CountrySelect from './components/CountrySelect'
 import PlanSheet, { type Plan } from './components/PlanSheet'
 import { SPECIES } from './data/species'
@@ -42,6 +43,7 @@ type Modal =
   | { kind: 'dive'; dive: Dive; back?: Modal }
   | { kind: 'share' }
   | { kind: 'import' }
+  | { kind: 'area'; area?: Area; country?: string; forPlan?: boolean; back?: Modal }
   | { kind: 'plan'; spotId?: string; country?: string; back?: Modal }
   | { kind: 'settings' }
   | null
@@ -81,7 +83,7 @@ export default function App() {
 
 function Main() {
   const { t, lang, setLang } = useI18n()
-  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay } = useAppData()
+  const { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, addCustomSpots } = useAppData()
   const [tab, setTab] = useState<Tab>('map')
   const [mapMode, setMapMode] = useState<MapMode>('travel')
   const [showAllSpots, setShowAllSpots] = useState(true)
@@ -97,6 +99,7 @@ function Main() {
   const numbers = useMemo(() => diveNumbers(data), [data])
   const diveCountries = useMemo(() => new Set(data.dives.map((d) => d.country)), [data.dives])
   const visits = useMemo(() => visitCounts(data), [data])
+  const livedLevels = useMemo(() => Object.fromEntries(Object.entries(data.lived ?? {}).map(([c, tier]) => [c, livedLevel(tier)])), [data.lived])
   const levels = useMemo(() => Object.fromEntries(Object.entries(visits).map(([c, n]) => [c, visitLevel(n)])), [visits])
   const cityPins = useMemo<MapMarker[]>(
     () => data.trips.flatMap((t) => (t.places ?? []).map((p, i) => ({ id: `city:${t.id}:${i}`, lat: p.lat, lon: p.lon, kind: 'city' as const }))),
@@ -157,7 +160,7 @@ function Main() {
     if (mapMode === 'travel') return cityPins
     const mine = new Set(data.dives.map((d) => d.spotId))
     return Object.values(spots)
-      .filter((s) => isFinite(s.lat) && isFinite(s.lon) && (mine.has(s.id) || (showAllSpots && !s.custom)))
+      .filter((s) => isFinite(s.lat) && isFinite(s.lon) && (mine.has(s.id) || showAllSpots))
       .map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, kind: mine.has(s.id) ? 'mine' : 'other' }))
   }, [mapMode, cityPins, spots, data.dives, showAllSpots])
 
@@ -288,6 +291,7 @@ function Main() {
               mode={mapMode}
               levels={levels}
               home={data.home}
+              lived={livedLevels}
               diveCountries={diveCountries}
               markers={markers}
               focus={focus}
@@ -307,6 +311,12 @@ function Main() {
                   {geoBusy && <small className="muted"> · {lang === 'ko' ? '위치 찾는 중…' : 'locating…'}</small>}
                 </span>
                 <span><i className="dot wish" />{t.wish}</span>
+                {Object.values(data.statuses).includes('lived') && (
+                  <span className="steps-legend" title={t.lived}>
+                    <i style={{ background: 'var(--lived-1)' }} /><i style={{ background: 'var(--lived-2)' }} /><i style={{ background: 'var(--lived-3)' }} /><i style={{ background: 'var(--lived-4)' }} />
+                    <small className="muted">{t.lived} {lang === 'ko' ? '1달 → 10년+' : '1 mo → 10 yr+'}</small>
+                  </span>
+                )}
                 {data.home ? (
                   <span><i className="dot home" />{lang === 'ko' ? '출생 국가' : 'Home'}</span>
                 ) : (
@@ -392,13 +402,14 @@ function Main() {
         <CountrySheet
           code={modal.code}
           status={data.statuses[modal.code]}
+          livedTier={data.lived?.[modal.code]}
           trips={tripsOf(modal.code)}
           visits={visits[modal.code]}
           isHome={data.home === modal.code}
           diveCount={data.dives.filter((d) => d.country === modal.code).length}
           spotCount={Object.values(spots).filter((s) => s.country === modal.code).length}
           onDive={() => openDiveCountry(modal.code)}
-          onStatus={(s) => setStatus(modal.code, s)}
+          onStatus={(s, tier) => setStatus(modal.code, s, tier)}
           onAddTrip={() => setModal({ kind: 'form', country: modal.code, back: modal.code })}
           onOpenTrip={(trip) => setModal({ kind: 'trip', trip, back: modal.code })}
           onClose={() => setModal(null)}
@@ -427,6 +438,10 @@ function Main() {
             trip={live}
             onEdit={() => setModal({ kind: 'form', trip: live, back: modal.back })}
             onDay={(date) => setModal({ kind: 'day', tripId: live.id, date, back: { kind: 'trip', trip: live, back: modal.back } })}
+            onFindDive={() => {
+              const pl = live.places![0]
+              setModal({ kind: 'area', area: { name: pl.name, lat: pl.lat, lon: pl.lon, country: live.country }, country: live.country, back: { kind: 'trip', trip: live, back: modal.back } })
+            }}
             onClose={() => backTo(modal.back)}
           />
         )
@@ -450,6 +465,7 @@ function Main() {
           onOpenSpot={openSpot}
           onAddDive={() => setModal({ kind: 'diveForm', country: modal.code, back: modal })}
           onPlan={() => setModal({ kind: 'plan', country: modal.code, back: modal })}
+          onFindArea={() => setModal({ kind: 'area', country: modal.code, back: modal })}
           onClose={() => setModal(null)}
         />
       )}
@@ -500,6 +516,7 @@ function Main() {
           data={data}
           spotId={modal.spotId}
           country={modal.country}
+          onFindArea={(country) => setModal({ kind: 'area', country: country || undefined, forPlan: true, back: modal })}
           onStart={(spot, country, plan) => {
             // 브리핑까지 마친 다이빙을 '예정'으로 저장 → 다이빙 후 디브리프
             const now = new Date()
@@ -527,6 +544,20 @@ function Main() {
             setTab('dive')
             setModal(null)
           }}
+          onClose={() => setModal(modal.back ?? null)}
+        />
+      )}
+      {modal?.kind === 'area' && (
+        <AreaFinder
+          data={data}
+          initial={modal.area}
+          country={modal.country}
+          onAdd={addCustomSpots}
+          onPickSpot={
+            modal.forPlan && modal.back?.kind === 'plan'
+              ? (spotId) => setModal({ ...(modal.back as Extract<Modal, { kind: 'plan' }>), spotId })
+              : undefined
+          }
           onClose={() => setModal(modal.back ?? null)}
         />
       )}

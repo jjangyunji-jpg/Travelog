@@ -7,7 +7,7 @@ export type Lang = 'ko' | 'en'
 const dict = {
   ko: {
     map: '지도', journal: '기록', stats: '통계', list: '나라',
-    visited: '가 봤어요', wish: '가고 싶어요', none: '표시 안 함',
+    visited: '가 봤어요', wish: '가고 싶어요', lived: '살아봤어요', none: '표시 안 함',
     countries: '개국', ofWorld: '세계의', share: '공유', shareMap: '내 여행 지도 공유',
     addTrip: '여행 기록 추가', editTrip: '여행 기록 수정', noTrips: '아직 여행 기록이 없어요.',
     noTripsHint: '지도에서 나라를 누르고 여행 기록을 남겨 보세요.',
@@ -46,7 +46,7 @@ const dict = {
   },
   en: {
     map: 'Map', journal: 'Journal', stats: 'Stats', list: 'Countries',
-    visited: 'Been there', wish: 'Want to go', none: 'Clear',
+    visited: 'Been there', wish: 'Want to go', lived: 'Lived here', none: 'Clear',
     countries: 'countries', ofWorld: 'of the world', share: 'Share', shareMap: 'Share my travel map',
     addTrip: 'Add a trip', editTrip: 'Edit trip', noTrips: 'No trips yet.',
     noTripsHint: 'Tap a country on the map and log your first trip.',
@@ -104,5 +104,9 @@ export function useI18n() {
     contName: (c: Continent) => continentNames[lang][c],
     spotName: (s: DiveSpot | undefined) => (s ? (lang === 'ko' ? s.nameKo : s.nameEn) : ''),
     pick: <T,>(ko: T, en: T) => (lang === 'ko' ? ko : en),
+    tierName: (tier?: string) =>
+      (lang === 'ko'
+        ? { m1: '한달살이', m6: '6개월 이상', y1: '1년 이상', y10: '10년 이상' }
+        : { m1: '1 month+', m6: '6 months+', y1: '1 year+', y10: '10 years+' })[(tier ?? 'm1') as 'm1'],
   }
 }

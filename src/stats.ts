@@ -2,7 +2,9 @@ import { CONTINENTS, COUNTRIES, COUNTRY_BY_CODE, SOVEREIGN_COUNT, type Continent
 import type { AppData } from './store'
 
 export function computeStats(data: AppData) {
-  const visited = Object.keys(data.statuses).filter((c) => data.statuses[c] === 'visited')
+  // 살아본 나라도 '방문한 나라'에 포함
+  const visited = Object.keys(data.statuses).filter((c) => data.statuses[c] === 'visited' || data.statuses[c] === 'lived')
+  const lived = Object.keys(data.statuses).filter((c) => data.statuses[c] === 'lived')
   const wish = Object.keys(data.statuses).filter((c) => data.statuses[c] === 'wish')
   const visitedSovereign = visited.filter((c) => COUNTRY_BY_CODE[c]?.sovereign).length
   const percent = Math.round((visitedSovereign / SOVEREIGN_COUNT) * 1000) / 10
@@ -17,7 +19,7 @@ export function computeStats(data: AppData) {
     const d = (new Date(t.endDate || t.startDate).getTime() - new Date(t.startDate).getTime()) / 86400000 + 1
     return sum + Math.max(1, Math.round(d))
   }, 0)
-  return { visited, wish, visitedSovereign, percent, byContinent, continentsVisited, days, total: SOVEREIGN_COUNT }
+  return { visited, lived, wish, visitedSovereign, percent, byContinent, continentsVisited, days, total: SOVEREIGN_COUNT }
 }
 
 /**
@@ -44,10 +46,14 @@ export function visitCounts(data: AppData): Record<string, number> {
     out[c] = (out[c] ?? 0) + groups
   }
   for (const [c, s] of Object.entries(data.statuses)) if (s === 'visited' && !out[c]) out[c] = 1
-  // 출생 국가는 방문 횟수 색에서 제외 (따로 보라색)
+  // 출생 국가(보라색)·살아본 나라(분홍~자주)는 방문 횟수 색에서 제외
   if (data.home) delete out[data.home]
+  for (const [c, s] of Object.entries(data.statuses)) if (s === 'lived') delete out[c]
   return out
 }
 
 /** 방문 횟수 → 색 단계 1~4 (1회 / 2회 / 3~4회 / 5회+) */
 export const visitLevel = (n: number) => (n >= 5 ? 4 : n >= 3 ? 3 : n >= 2 ? 2 : 1)
+
+/** 살아본 기간 → 색 단계 1~4 */
+export const livedLevel = (tier?: string) => (tier === 'y10' ? 4 : tier === 'y1' ? 3 : tier === 'm6' ? 2 : 1)

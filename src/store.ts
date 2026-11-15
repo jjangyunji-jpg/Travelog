@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { del, get, set } from 'idb-keyval'
 import type { DiveSpot } from './data/diveSpots'
 
-export type Status = 'visited' | 'wish'
+export type Status = 'visited' | 'wish' | 'lived'
+/** 살아본 기간: 한달살이 이상 / 6개월 이상 / 1년 이상 / 10년 이상 */
+export type LivedTier = 'm1' | 'm6' | 'y1' | 'y10'
+export const LIVED_TIERS: LivedTier[] = ['m1', 'm6', 'y1', 'y10']
 
 export interface TripDay {
   date: string
@@ -93,6 +96,8 @@ export interface AppData {
   deleted: Record<string, number>
   diveOffsetTs: number
   customSpecies: Record<string, CustomSpecies>
+  /** 살아본 나라의 기간 */
+  lived?: Record<string, LivedTier>
   /** 출생 국가 (홈) */
   home?: string
   homeTs?: number
@@ -125,7 +130,7 @@ function load(): AppData {
 }
 
 function markVisited(d: AppData, code: string, now: number): AppData {
-  if (d.statuses[code] === 'visited') return d
+  if (d.statuses[code] === 'visited' || d.statuses[code] === 'lived') return d
   const deleted = { ...d.deleted }
   delete deleted['status:' + code]
   return { ...d, statuses: { ...d.statuses, [code]: 'visited' }, statusTs: { ...d.statusTs, [code]: now }, deleted }
@@ -144,11 +149,12 @@ export function useAppData() {
     }
   }, [data])
 
-  const setStatus = useCallback((code: string, status: Status | null) => {
+  const setStatus = useCallback((code: string, status: Status | null, tier?: LivedTier) => {
     setData((d) => {
       const now = Date.now()
       const statuses = { ...d.statuses }
       const deleted = { ...d.deleted }
+      const lived = { ...(d.lived ?? {}) }
       if (status) {
         statuses[code] = status
         delete deleted['status:' + code]
@@ -156,7 +162,8 @@ export function useAppData() {
         delete statuses[code]
         deleted['status:' + code] = now
       }
-      return { ...d, statuses, deleted, statusTs: { ...d.statusTs, [code]: now } }
+      if (status === 'lived') lived[code] = tier ?? lived[code] ?? 'm1'
+      return { ...d, statuses, deleted, lived, statusTs: { ...d.statusTs, [code]: now } }
     })
   }, [])
 
@@ -227,6 +234,22 @@ export function useAppData() {
     [],
   )
 
+  /** 다이빙 포인트를 내 스팟으로 저장 (같은 id는 건너뜀) */
+  const addCustomSpots = useCallback((spots: DiveSpot[]) => {
+    setData((d) => {
+      const now = Date.now()
+      const fresh = spots.filter((s) => !d.customSpots.some((x) => x.id === s.id))
+      if (!fresh.length) return d
+      const deleted = { ...d.deleted }
+      fresh.forEach((s) => delete deleted['spot:' + s.id])
+      return { ...d, deleted, customSpots: [...d.customSpots, ...fresh.map((s) => ({ ...s, custom: true, updatedAt: now }))] }
+    })
+  }, [])
+
+  const removeCustomSpot = useCallback((id: string) => {
+    setData((d) => ({ ...d, customSpots: d.customSpots.filter((s) => s.id !== id), deleted: { ...d.deleted, ['spot:' + id]: Date.now() } }))
+  }, [])
+
   /** 하루 일기 저장 (같은 날짜는 덮어씀, 비면 지움) */
   const saveTripDay = useCallback((tripId: string, day: TripDay) => {
     setData((d) => {
@@ -263,7 +286,7 @@ export function useAppData() {
 
   const replaceAll = useCallback((next: AppData) => setData(normalize(next)), [])
 
-  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, replaceAll }
+  return { data, setData, setStatus, saveTrip, deleteTrip, saveDive, deleteDive, importDives, setDiveOffset, addSpecies, patchTrips, setHome, saveTripDay, addCustomSpots, removeCustomSpot, replaceAll }
 }
 
 /* ---------- 사진 (IndexedDB) ---------- */

@@ -4,7 +4,7 @@ import type { AppData } from '../store'
 import { computeStats } from '../stats'
 
 export default function StatsView({ data, onSelect }: { data: AppData; onSelect: (code: string) => void }) {
-  const { t, lang, cName, contName } = useI18n()
+  const { t, lang, cName, contName, tierName } = useI18n()
   const s = computeStats(data)
   const sortByName = (codes: string[]) => [...codes].sort((a, b) => cName(COUNTRY_BY_CODE[a]).localeCompare(cName(COUNTRY_BY_CODE[b])))
   return (
@@ -43,6 +43,16 @@ export default function StatsView({ data, onSelect }: { data: AppData; onSelect:
           <button key={c} className="chip visited" onClick={() => onSelect(c)}>{flagEmoji(c)} {cName(COUNTRY_BY_CODE[c])}</button>
         ))}
       </div>
+      {s.lived.length > 0 && (
+        <>
+          <h3>{t.lived} <span className="muted">{s.lived.length}</span></h3>
+          <div className="chips">
+            {sortByName(s.lived).map((c) => (
+              <button key={c} className="chip lived" onClick={() => onSelect(c)}>{flagEmoji(c)} {cName(COUNTRY_BY_CODE[c])} · {tierName(data.lived?.[c])}</button>
+            ))}
+          </div>
+        </>
+      )}
       <h3>{t.wishCountries} <span className="muted">{s.wish.length}</span></h3>
       <div className="chips">
         {sortByName(s.wish).map((c) => (

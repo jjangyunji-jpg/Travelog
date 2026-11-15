@@ -6,10 +6,11 @@ import { fmtDay } from './DayForm'
 import Sheet from './Sheet'
 import { formatRange, Thumb } from './TripCard'
 
-export default function TripDetail({ trip, onEdit, onDay, onClose }: {
+export default function TripDetail({ trip, onEdit, onDay, onFindDive, onClose }: {
   trip: Trip
   onEdit: () => void
   onDay: (date: string) => void
+  onFindDive: () => void
   onClose: () => void
 }) {
   const { lang, t, cName, pick } = useI18n()
@@ -29,6 +30,11 @@ export default function TripDetail({ trip, onEdit, onDay, onClose }: {
           </div>
         )}
         {trip.note && <p className="detail-note">{trip.note}</p>}
+        {(trip.places?.length ?? 0) > 0 && (
+          <button className="find-area-btn" onClick={onFindDive}>
+            🤿 {pick(`${trip.places![0].name} 주변 다이빙 포인트 찾기`, `Find dive sites near ${trip.places![0].name}`)}
+          </button>
+        )}
 
         {dates.length > 0 && (
           <section className="days">

@@ -26,6 +26,7 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
 
   const statuses: AppData['statuses'] = {}
   const statusTs: Record<string, number> = {}
+  const lived: NonNullable<AppData['lived']> = {}
   const codes = new Set([...Object.keys(local.statusTs), ...Object.keys(remote.statusTs), ...Object.keys(local.statuses), ...Object.keys(remote.statuses)])
   for (const code of codes) {
     const lt = local.statusTs[code] ?? 0
@@ -37,7 +38,14 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
     let value: (typeof lv) | undefined
     if (rt > lt) value = rv
     else if (lt > rt) value = lv
-    else value = lv === 'visited' || rv === 'visited' ? 'visited' : (lv ?? rv)
+    else {
+      // 같은 시각이면 살아봤어요 > 가 봤어요 > 가고 싶어요
+      const rank = (v?: string) => (v === 'lived' ? 3 : v === 'visited' ? 2 : v === 'wish' ? 1 : 0)
+      value = rank(rv) > rank(lv) ? rv : lv ?? rv
+    }
+    // 살아본 기간은 상태를 고른 쪽의 값을 따름
+    const tier = rt > lt ? (remote.lived?.[code] ?? local.lived?.[code]) : (local.lived?.[code] ?? remote.lived?.[code])
+    if (value === 'lived' && tier) lived[code] = tier
     const t = Math.max(lt, rt)
     statusTs[code] = t
     if (value && !(deleted['status:' + code] >= t && t > 0)) statuses[code] = value
@@ -64,6 +72,7 @@ export function mergeData(localRaw: AppData, remoteRaw: Partial<AppData>): AppDa
     diveOffset: remoteNewerOffset ? remote.diveOffset : local.diveOffset,
     diveOffsetTs: Math.max(local.diveOffsetTs, remote.diveOffsetTs),
     customSpecies: { ...remote.customSpecies, ...local.customSpecies },
+    lived,
     home: (remote.homeTs ?? 0) > (local.homeTs ?? 0) ? remote.home : local.home,
     homeTs: Math.max(local.homeTs ?? 0, remote.homeTs ?? 0) || undefined,
   }

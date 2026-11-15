@@ -69,6 +69,8 @@ interface Props {
   levels?: Record<string, number>
   /** 출생 국가 */
   home?: string
+  /** 살아본 나라 색 단계 1~4 */
+  lived?: Record<string, number>
   diveCountries?: Set<string>
   markers?: MapMarker[]
   selected?: string
@@ -80,8 +82,10 @@ interface Props {
   onPick?: (lat: number, lon: number) => void
 }
 
-function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: boolean, level?: number, isHome?: boolean) {
+function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: boolean, level?: number, isHome?: boolean, livedLv?: number) {
   if (isHome && mode === 'travel') return view === 'city' ? 'var(--home-soft)' : 'var(--home)'
+  if (s === 'lived' && mode === 'travel') return `var(--lived-${livedLv ?? 1})`
+  if (s === 'lived') s = 'visited'
   if (mode === 'dive') {
     if (dived) return 'var(--dive-land)'
     return s === 'visited' ? 'var(--visited-soft)' : 'var(--land)'
@@ -90,8 +94,9 @@ function fillFor(mode: MapMode, view: TravelView, s: Status | undefined, dived: 
   return s === 'visited' ? `var(--visit-${level ?? 1})` : s === 'wish' ? 'var(--wish)' : 'var(--land)'
 }
 
-const Paths = memo(function Paths({ statuses, selected, mode, view, levels, home, diveCountries }: {
+const Paths = memo(function Paths({ statuses, selected, mode, view, levels, home, lived, diveCountries }: {
   home?: string
+  lived?: Record<string, number>
   statuses: Record<string, Status>
   selected?: string
   mode: MapMode
@@ -106,7 +111,7 @@ const Paths = memo(function Paths({ statuses, selected, mode, view, levels, home
           key={i}
           d={p.d}
           data-code={p.code}
-          fill={fillFor(mode, view, statuses[p.code], !!diveCountries?.has(p.code), levels?.[p.code], p.code === home)}
+          fill={fillFor(mode, view, statuses[p.code], !!diveCountries?.has(p.code), levels?.[p.code], p.code === home, lived?.[p.code])}
           className={p.code === selected ? 'country selected' : 'country'}
         />
       ))}
@@ -123,7 +128,7 @@ const clamp = (v: View): View => {
   return { k, x, y }
 }
 
-export default function WorldMap({ statuses, mode = 'travel', travelView = 'country', levels, home, diveCountries, markers, selected, onSelect, onSelectSpot, focus, onPick }: Props) {
+export default function WorldMap({ statuses, mode = 'travel', travelView = 'country', levels, home, lived, diveCountries, markers, selected, onSelect, onSelectSpot, focus, onPick }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState<View>({ k: 1, x: 0, y: 0 })
   const viewRef = useRef(view)
@@ -279,7 +284,7 @@ export default function WorldMap({ statuses, mode = 'travel', travelView = 'coun
         onPointerCancel={onPointerUp}
       >
         <g transform={transform}>
-          <Paths statuses={statuses} selected={selected} mode={mode} view={travelView} levels={levels} home={home} diveCountries={diveCountries} />
+          <Paths statuses={statuses} selected={selected} mode={mode} view={travelView} levels={levels} home={home} lived={lived} diveCountries={diveCountries} />
           {projected.map((m) => {
             const [x, y] = m.p
             const r = (m.kind === 'other' ? 4 * shrink : m.kind === 'pick' ? 8 : m.kind === 'city' ? 5.5 * shrink : 7 * shrink) * px

@@ -72,7 +72,7 @@ export default function MapSearch({ statuses, onPick }: { statuses: Record<strin
                   <span>{it.city ? '📍' : flagEmoji(it.code)}</span> {it.label}
                   <small className="muted">
                     {it.city ? `${flagEmoji(it.code)} ${it.sub}` : it.sub}
-                    {st && ` · ${st === 'visited' ? t.visited : t.wish}`}
+                    {st && ` · ${st === 'visited' ? t.visited : st === 'lived' ? t.lived : t.wish}`}
                   </small>
                 </button>
               </li>
