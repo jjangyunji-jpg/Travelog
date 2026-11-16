@@ -1,6 +1,6 @@
 // 간단한 오프라인 캐시: 같은 출처의 앱 파일만, 네트워크 우선 → 실패 시 캐시
 // (Google 로그인·Drive 요청은 절대 캐시하지 않음)
-const CACHE = 'travelog-v3'
+const CACHE = 'travelog-v4'
 const PHOTO_CACHE = 'travelog-species-photos'
 const PHOTO_HOSTS = ['inaturalist-open-data.s3.amazonaws.com', 'static.inaturalist.org']
 self.addEventListener('install', () => self.skipWaiting())
@@ -22,6 +22,8 @@ self.addEventListener('fetch', (e) => {
     return
   }
   if (url.origin !== self.location.origin) return
+  // 서버 기능(/api)은 저장하지 않음 (매번 새로)
+  if (url.pathname.startsWith('/api/')) return
   e.respondWith(
     fetch(e.request)
       .then((res) => {

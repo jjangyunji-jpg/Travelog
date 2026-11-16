@@ -582,3 +582,8 @@ h2, h3 { margin: 0; }
 .week .day-list { margin: 10px 10px 10px 18px; }
 .day-head b, .day-head .muted { white-space: nowrap; }
 .day-head .muted { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* 화면이 옆으로 밀리지 않게 */
+html, body { overflow-x: hidden; max-width: 100%; }
+.sheet, .sheet-body { overflow-x: hidden; }
+.sheet-body > * { min-width: 0; max-width: 100%; }
+.err-detail, .err-detail pre { max-width: 100%; overflow-x: auto; }

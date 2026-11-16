@@ -62,6 +62,28 @@ export async function findDiveSites(lat: number, lon: number, radiusKm: number, 
   // 정확한 태그 값만 사용 (정규식은 서버가 전 세계 sport 값을 다 훑어서 느림)
   const query = `[out:json][timeout:12];(nwr["sport"="scuba_diving"]${bb};nwr["leisure"="dive_site"]${bb};nwr["sport"="free_diving"]${bb};);out tags center 150;`
   const errors: string[] = []
+  // 1) 우리 Vercel 서버를 거쳐서 (휴대폰 LTE에서 Overpass가 거절하는 문제 회피, 하루 캐시)
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 58000)
+    const res = await fetch(`/api/dive-sites?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&r=${radiusKm}`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    const type = res.headers.get('content-type') ?? ''
+    if (!type.includes('json')) throw new Error('서버 기능 없음')
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || 'HTTP ' + res.status)
+    const sites = parse(json.elements ?? [], lang).filter((x) => distKm(lat, lon, x.lat, x.lon) <= radiusKm)
+    try {
+      localStorage.setItem(key, JSON.stringify(sites))
+    } catch {
+      /* 무시 */
+    }
+    return { sites, cached: false }
+  } catch (e) {
+    const err = e as Error
+    errors.push(`Travelog 서버: ${err.name === 'AbortError' ? '시간 초과' : err.message}`)
+  }
+  // 2) 휴대폰에서 직접
   for (const url of ENDPOINTS) {
     // 서버마다 POST, 안 되면 GET 한 번 더
     for (const usePost of [true, false]) {

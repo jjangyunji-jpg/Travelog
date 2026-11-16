@@ -153,7 +153,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
               ))}
             </div>
 
-            {state === 'loading' && <p className="muted small">{pick('OpenStreetMap에서 다이빙 포인트 찾는 중… (최대 20초씩, 서버 3곳 차례로)', 'Searching OpenStreetMap…')}</p>}
+            {state === 'loading' && <p className="muted small">{pick('OpenStreetMap에서 다이빙 포인트 찾는 중… 서버가 붐비면 1분 가까이 걸릴 수 있어요', 'Searching OpenStreetMap… may take up to a minute')}</p>}
             {state === 'error' && (
               <p className="import-error small">
                 {pick('다이빙 포인트 서버(OpenStreetMap)가 지금 붐벼서 응답이 없어요. 잠시 뒤 다시 시도해 주세요.', 'The dive-site server is busy. Please retry in a moment.')}{' '}
