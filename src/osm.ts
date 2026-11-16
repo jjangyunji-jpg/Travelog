@@ -199,17 +199,34 @@ interface DatasetIndex {
 }
 type Row = [string, string, string?, string?, number?, number?, string?, string?]
 
+// 앱을 켜 둔 채로 데이터가 갱신돼도 반영되게 10분마다 목록을 다시 받음
 let indexPromise: Promise<DatasetIndex | null> | null = null
+let indexAt = 0
+let indexVersion = ''
 function loadIndex(): Promise<DatasetIndex | null> {
-  indexPromise ??= fetch('/dive-sites/index.json')
-    .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
-    .catch(() => null)
+  if (!indexPromise || Date.now() - indexAt > 10 * 60 * 1000) {
+    indexAt = Date.now()
+    indexPromise = fetch('/dive-sites/index.json', { cache: 'no-cache' })
+      .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
+      .then((idx: DatasetIndex | null) => {
+        // 데이터가 바뀌었으면 칸 파일도 새로 받기
+        const v = idx ? `${idx.updated}|${idx.count}|${idx.ai?.updated ?? ''}|${idx.ai?.count ?? 0}` : ''
+        if (v !== indexVersion) tileCache.clear()
+        indexVersion = v
+        if (!idx) indexAt = 0 // 실패하면 다음에 다시 시도
+        return idx
+      })
+      .catch(() => {
+        indexAt = 0
+        return null
+      })
+  }
   return indexPromise
 }
 const tileCache = new Map<string, Promise<Row[]>>()
 function loadTile(key: string): Promise<Row[]> {
   if (!tileCache.has(key)) {
-    const p = fetch(`/dive-sites/${key}.json`).then((r) => (r.ok ? r.json() : []))
+    const p = fetch(`/dive-sites/${key}.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : []))
     p.catch(() => tileCache.delete(key))
     tileCache.set(key, p)
   }
