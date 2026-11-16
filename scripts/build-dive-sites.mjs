@@ -1,7 +1,7 @@
 // 전 세계 다이빙 포인트·다이빙샵을 OpenStreetMap에서 받아 앱의 데이터 파일로 저장
 // 실행: node scripts/build-dive-sites.mjs
 // 결과: public/dive-sites/index.json + 위도·경도 10도 칸별 파일 (앱은 필요한 지역 칸만 받음)
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const OUT = new URL('../public/dive-sites/', import.meta.url)
 const ENDPOINTS = [
@@ -98,9 +98,32 @@ export function build(elements) {
   return { tiles, count }
 }
 
+const inBox = ([s, w, n, e], lat, lon) => lat >= s && lat < n && lon >= w && lon < e
+
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // 이번에 받은 구역만 새것으로 바꾸고, 못 받은 구역은 예전 데이터를 유지 (실행할수록 채워짐)
+  let prevChunks = []
+  const prevRows = []
+  const indexUrl = new URL('index.json', OUT)
+  if (existsSync(indexUrl)) {
+    const prev = JSON.parse(readFileSync(indexUrl, 'utf8'))
+    prevChunks = prev.chunks ?? []
+    for (const key of Object.keys(prev.tiles ?? {})) {
+      const f = new URL(`${key}.json`, OUT)
+      if (existsSync(f)) prevRows.push(...JSON.parse(readFileSync(f, 'utf8')))
+    }
+  }
+  // 예전에 못 받은 구역부터 먼저 받기
+  const missingFirst = (a, b) => Number(prevChunks.some((c) => c.join() === a.join())) - Number(prevChunks.some((c) => c.join() === b.join()))
+  CHUNKS.sort(missingFirst)
   const { elements, done } = await fetchAll()
-  const { tiles, count } = build(elements)
+  const fresh = build(elements)
+  const keep = prevRows.filter((r) => !done.some((box) => inBox(box, r[4], r[5])))
+  const tiles = {}
+  for (const r of keep) (tiles[`${Math.floor((r[4] + 90) / 10)}_${Math.floor((r[5] + 180) / 10)}`] ??= []).push(r)
+  for (const [k, rows] of Object.entries(fresh.tiles)) (tiles[k] ??= []).push(...rows)
+  const count = Object.values(tiles).reduce((n, rows) => n + rows.length, 0)
+  const chunks = [...done, ...prevChunks.filter((c) => !done.some((d) => d.join() === c.join()))]
   mkdirSync(OUT, { recursive: true })
   for (const [key, rows] of Object.entries(tiles)) writeFileSync(new URL(`${key}.json`, OUT), JSON.stringify(rows))
   // 앱은 index에 있는 칸만 받고, 받지 못한 구역(chunks에 없음)은 실시간 조회로
@@ -108,9 +131,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     updated: new Date().toISOString().slice(0, 10),
     count,
     tiles: Object.fromEntries(Object.entries(tiles).map(([k, v]) => [k, v.length])),
-    chunks: done,
+    chunks,
     source: '© OpenStreetMap contributors (ODbL)',
   }
-  writeFileSync(new URL('index.json', OUT), JSON.stringify(index))
-  console.log(`완료: ${count}곳, 칸 ${Object.keys(tiles).length}개, 받은 구역 ${done.length}/${CHUNKS.length}`)
+  writeFileSync(indexUrl, JSON.stringify(index))
+  console.log(`완료: ${count}곳, 칸 ${Object.keys(tiles).length}개, 이번에 받은 구역 ${done.length}, 전체 받은 구역 ${chunks.length}/${CHUNKS.length}`)
 }
