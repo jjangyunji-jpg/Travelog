@@ -204,14 +204,14 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
             {/* 3. OpenStreetMap 포인트 */}
             {osm && (
               <section>
-                <h4 className="sub">🗺️ {pick('주변 다이빙 포인트 (OpenStreetMap)', 'Nearby sites (OpenStreetMap)')} <span className="muted">{osmSites.length}</span></h4>
+                <h4 className="sub">🗺️ {pick('주변 다이빙 포인트', 'Nearby dive sites')} <span className="muted">{osmSites.length}</span></h4>
                 {osmSites.length === 0 && <p className="muted small">{pick('이 지역에는 등록된 포인트가 없어요. 아래에서 직접 추가해 주세요.', 'No sites listed here. Add your own below.')}</p>}
                 <ul className="area-list">
                   {osmSites.map((x) => (
                     <li key={x.id}>
                       <span className="spot-pin" />
                       <div className="spot-info">
-                        <div className="spot-name">{x.name}</div>
+                        <div className="spot-name">{x.name}{x.ai && <span className="ai-badge" title={pick('AI가 찾고 지도에서 위치를 확인한 포인트예요. 현지 샵에 한 번 더 확인해 주세요.', 'Found by AI and located on the map. Please double-check with a local shop.')}>{pick('AI 추천', 'AI')}</span>}</div>
                         <div className="muted small">{dist(x)}{x.depth ? ` · ⬇ ${x.depth}m` : ''}{x.local ? ` · ${x.local}` : ''}</div>
                       </div>
                       <button

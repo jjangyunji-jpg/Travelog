@@ -11,6 +11,8 @@ export interface OsmDiveSite {
   depth?: string
   /** 현지어 원래 이름 (표시 이름과 다를 때) */
   local?: string
+  /** AI가 찾고 지도 검색으로 위치를 확인한 포인트 */
+  ai?: boolean
 }
 
 const ENDPOINTS = [
@@ -192,6 +194,8 @@ interface DatasetIndex {
   tiles: Record<string, number>
   /** 받은 구역 [남, 서, 북, 동] (없으면 전 세계) */
   chunks?: [number, number, number, number][]
+  /** AI로 채운 포인트 (ai/{칸}.json) */
+  ai?: { updated: string; count: number; tiles: Record<string, number> }
 }
 type Row = [string, string, string?, string?, number?, number?, string?, string?]
 
@@ -229,13 +233,18 @@ export async function findInDataset(lat: number, lon: number, radiusKm: number, 
       const wrapped = ((((lo + 180) % 360) + 360) % 360) - 180
       keys.add(`${Math.floor((Math.max(-89.99, Math.min(89.99, la)) + 90) / 10)}_${Math.floor((wrapped + 180) / 10)}`)
     }
-  const rows = (await Promise.all([...keys].filter((k) => index.tiles[k]).map(loadTile))).flat()
+  const rows = (
+    await Promise.all([
+      ...[...keys].filter((k) => index.tiles[k]).map(loadTile),
+      ...[...keys].filter((k) => index.ai?.tiles[k]).map((k) => loadTile('ai/' + k).catch(() => [] as Row[])),
+    ])
+  ).flat()
   const sites: OsmDiveSite[] = []
   for (const [id, en, ko, local, la, lo, kind, depth] of rows) {
     if (la == null || lo == null || distKm(lat, lon, la, lo) > radiusKm) continue
     const shop = kind === 'h'
     const name = (lang === 'ko' ? ko || en : en || ko) || local || (shop ? (lang === 'ko' ? '이름 없는 다이빙샵' : 'Unnamed dive shop') : lang === 'ko' ? '이름 없는 포인트' : 'Unnamed site')
-    sites.push({ id: 'osm-' + id, name, lat: la, lon: lo, kind: shop ? 'shop' : 'site', depth: depth || undefined, local: local && local !== name ? local : undefined })
+    sites.push({ id: 'osm-' + id, name, lat: la, lon: lo, kind: shop ? 'shop' : 'site', depth: depth || undefined, local: local && local !== name ? local : undefined, ai: kind === 'a' || undefined })
   }
   return { sites, updated: index.updated }
 }
