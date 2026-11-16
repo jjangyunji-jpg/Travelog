@@ -47,6 +47,67 @@ function savedToken(): Token | null {
   return null
 }
 export const hasValidToken = () => !!savedToken()
+function saveToken(access: string, expiresIn?: number): string {
+  const t: Token = { token: access, exp: Date.now() + (expiresIn ?? 3600) * 1000 }
+  try {
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(t))
+  } catch {
+    /* 무시 */
+  }
+  return access
+}
+
+/* ---------------- 자동 로그인 유지 (Vercel 서버 기능 /api/google-auth) ---------------- */
+const AUTH_API = '/api/google-auth'
+/** 서버 기능이 설정돼 있는지 (GOOGLE_CLIENT_SECRET). 한 번 확인하면 기억 */
+let serverReady: boolean | null = null
+
+/** 로그인 창 없이 출입증을 새로 받기. 안 되면 null */
+export async function silentToken(): Promise<string | null> {
+  const existing = savedToken()
+  if (existing) return existing.token
+  return fromServer()
+}
+
+/** 서버 쿠키의 갱신 키로 새 출입증 받기 */
+async function fromServer(): Promise<string | null> {
+  if (serverReady === false) return null
+  try {
+    const r = await fetch(AUTH_API, { credentials: 'same-origin' })
+    if (r.status === 501 || r.status === 404 || !(r.headers.get('content-type') ?? '').includes('json')) {
+      serverReady = false
+      return null
+    }
+    serverReady = true
+    if (!r.ok) return null
+    const j = await r.json()
+    return j.access_token ? saveToken(j.access_token, j.expires_in) : null
+  } catch {
+    return null
+  }
+}
+
+async function serverSupported(): Promise<boolean> {
+  if (serverReady == null) await fromServer()
+  return serverReady === true
+}
+
+/** 서버 기능으로 로그인: Google 창에서 코드를 받아 서버가 갱신 키를 쿠키에 보관 */
+async function signInWithServer(clientId: string): Promise<string> {
+  const code = await new Promise<string>((resolve, reject) => {
+    window.google!.accounts.oauth2.initCodeClient!({
+      client_id: clientId,
+      scope: SCOPE,
+      ux_mode: 'popup',
+      callback: (r) => (r.code ? resolve(r.code) : reject(new Error(r.error || 'auth-failed'))),
+      error_callback: (e) => reject(new Error(e.type || 'auth-failed')),
+    }).requestCode()
+  })
+  const r = await fetch(AUTH_API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !j.access_token) throw new Error(j.error || 'auth-failed')
+  return saveToken(j.access_token, j.expires_in)
+}
 export function clearToken() {
   try {
     localStorage.removeItem(TOKEN_KEY)
@@ -76,6 +137,13 @@ declare global {
             callback: (r: TokenResponse) => void
             error_callback?: (e: { type: string }) => void
           }) => TokenClient
+          initCodeClient?: (cfg: {
+            client_id: string
+            scope: string
+            ux_mode: 'popup'
+            callback: (r: { code?: string; error?: string }) => void
+            error_callback?: (e: { type: string }) => void
+          }) => { requestCode: () => void }
           revoke?: (token: string, cb?: () => void) => void
         }
       }
@@ -102,10 +170,18 @@ export function loadGis(): Promise<void> {
 
 /** 로그인 창을 띄워 토큰을 받음. 버튼 클릭 등 사용자 동작 안에서 호출해야 팝업이 막히지 않음 */
 export async function signIn(interactive: boolean): Promise<string> {
-  const existing = savedToken()
-  if (existing) return existing.token
   const clientId = getClientId()
   if (!clientId) throw new Error('no-client-id')
+  // 서버 기능이 있으면 한 번 로그인으로 계속 유지되는 방식 (이 기기에 갱신 키가 없을 때만 로그인 창)
+  if (interactive && (await serverSupported())) {
+    const t = await fromServer()
+    if (t) return t
+    await loadGis()
+    if (window.google!.accounts.oauth2.initCodeClient) return signInWithServer(clientId)
+  }
+  // 없으면 1시간짜리 방식
+  const silent = await silentToken()
+  if (silent) return silent
   await loadGis()
   return new Promise((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initTokenClient({
@@ -113,13 +189,7 @@ export async function signIn(interactive: boolean): Promise<string> {
       scope: SCOPE,
       callback: (r) => {
         if (!r.access_token) return reject(new Error(r.error || 'auth-failed'))
-        const t: Token = { token: r.access_token, exp: Date.now() + (r.expires_in ?? 3600) * 1000 }
-        try {
-          localStorage.setItem(TOKEN_KEY, JSON.stringify(t))
-        } catch {
-          /* 무시 */
-        }
-        resolve(t.token)
+        resolve(saveToken(r.access_token, r.expires_in))
       },
       error_callback: (e) => reject(new Error(e.type || 'auth-failed')),
     })
@@ -131,17 +201,20 @@ export function signOut() {
   const t = savedToken()
   if (t) window.google?.accounts.oauth2.revoke?.(t.token)
   clearToken()
+  if (serverReady) fetch(AUTH_API, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {})
 }
 
 /* ---------------- Drive REST ---------------- */
 export class AuthError extends Error {}
 
-async function call(path: string, init: RequestInit = {}): Promise<Response> {
-  const t = savedToken()
-  if (!t) throw new AuthError('no-token')
-  const res = await fetch(path, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${t.token}` } })
+async function call(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  const token = await silentToken()
+  if (!token) throw new AuthError('no-token')
+  const res = await fetch(path, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` } })
   if (res.status === 401) {
     clearToken()
+    // 출입증이 중간에 만료됐으면 자동으로 새로 받아 한 번 더
+    if (!retried && serverReady) return call(path, init, true)
     throw new AuthError('expired')
   }
   if (!res.ok) throw new Error(`drive ${res.status}`)

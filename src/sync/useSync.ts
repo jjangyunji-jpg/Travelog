@@ -55,7 +55,7 @@ async function syncOnce(local: AppData): Promise<AppData> {
 
 export function useSync(data: AppData, setData: (fn: (d: AppData) => AppData) => void) {
   const [enabled, setEnabled] = useState(() => readFlag(ENABLED_KEY) === '1')
-  const [state, setState] = useState<SyncState>(enabled ? (drive.hasValidToken() ? 'idle' : 'needsLogin') : 'off')
+  const [state, setState] = useState<SyncState>(enabled ? 'idle' : 'off')
   const [lastSync, setLastSync] = useState<number>(() => Number(readFlag(LAST_KEY)) || 0)
   const [error, setError] = useState('')
   const dataRef = useRef(data)
@@ -66,14 +66,18 @@ export function useSync(data: AppData, setData: (fn: (d: AppData) => AppData) =>
 
   const run = useCallback(async () => {
     if (!readFlag(ENABLED_KEY)) return
-    if (!drive.hasValidToken()) return setState('needsLogin')
     if (running.current) {
       again.current = true
       return
     }
     running.current = true
-    setState('syncing')
     try {
+      // 출입증이 만료됐으면 로그인 창 없이 자동으로 새로 받기 (안 되면 느낌표 → 버튼으로 로그인)
+      if (!(await drive.silentToken())) {
+        setState('needsLogin')
+        return
+      }
+      setState('syncing')
       const before = dataRef.current
       const merged = await syncOnce(before)
       // 동기화하는 동안 이 기기에서 바뀐 내용도 잃지 않도록 한 번 더 합침
