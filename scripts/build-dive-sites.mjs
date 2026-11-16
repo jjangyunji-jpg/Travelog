@@ -9,39 +9,61 @@ const ENDPOINTS = [
   'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
-const QUERY = `[out:json][timeout:900][maxsize:1073741824];(
-nwr["sport"="scuba_diving"];
-nwr["leisure"="dive_site"];
-nwr["sport"="free_diving"];
-nwr["amenity"="dive_centre"];
-nwr["shop"="scuba_diving"];
-);out tags center;`
+// 전 세계를 한 번에 요청하면 서버 앞단이 1~2분 만에 끊어서(504), 36개 구역으로 나눠 받음
+const query = ([s, w, n, e]) => {
+  const bb = `(${s},${w},${n},${e})`
+  return `[out:json][timeout:170];(nwr["sport"="scuba_diving"]${bb};nwr["leisure"="dive_site"]${bb};nwr["sport"="free_diving"]${bb};nwr["amenity"="dive_centre"]${bb};nwr["shop"="scuba_diving"]${bb};);out tags center;`
+}
+export const CHUNKS = []
+for (let s = -90; s < 90; s += 30) for (let w = -180; w < 180; w += 60) CHUNKS.push([s, w, s + 30, w + 60])
 
-async function fetchAll() {
-  for (let round = 0; round < 3; round++) {
-    for (const url of ENDPOINTS) {
-      try {
-        console.log('요청:', url)
-        const ctrl = new AbortController()
-        const t = setTimeout(() => ctrl.abort(), 15 * 60 * 1000)
-        const res = await fetch(url, {
-          method: 'POST',
-          body: new URLSearchParams({ data: QUERY }),
-          headers: { 'User-Agent': 'Travelog dive-site dataset builder' },
-          signal: ctrl.signal,
-        })
-        clearTimeout(t)
-        if (!res.ok) throw new Error('HTTP ' + res.status)
-        const json = await res.json()
-        if (!json.elements?.length) throw new Error('결과 없음 ' + (json.remark ?? ''))
-        return json.elements
-      } catch (e) {
-        console.log('실패:', url, e.message)
-      }
-    }
-    await new Promise((r) => setTimeout(r, 30000 * (round + 1)))
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function ask(url, q) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 200 * 1000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: new URLSearchParams({ data: q }),
+      headers: { 'User-Agent': 'Travelog dive-site dataset builder (monthly)' },
+      signal: ctrl.signal,
+    })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const json = await res.json()
+    if (json.remark && /error|timed out|runtime/i.test(json.remark)) throw new Error(json.remark.slice(0, 120))
+    return json.elements ?? []
+  } finally {
+    clearTimeout(t)
   }
-  throw new Error('모든 Overpass 서버 실패')
+}
+
+/** 구역마다 서버를 바꿔 가며 최대 3바퀴 시도. 받은 구역 목록도 돌려줌 */
+async function fetchAll() {
+  const byId = new Map()
+  const done = []
+  for (const [i, box] of CHUNKS.entries()) {
+    let ok = false
+    for (let round = 0; round < 3 && !ok; round++) {
+      for (const url of ENDPOINTS) {
+        try {
+          const els = await ask(url, query(box))
+          for (const e of els) byId.set(e.type + e.id, e)
+          console.log(`구역 ${i + 1}/${CHUNKS.length} ${JSON.stringify(box)}: ${els.length}곳 (${new URL(url).hostname})`)
+          ok = true
+          break
+        } catch (e) {
+          console.log(`구역 ${i + 1} 실패 ${new URL(url).hostname}: ${e.message}`)
+          await sleep(3000)
+        }
+      }
+      if (!ok) await sleep(20000 * (round + 1))
+    }
+    if (ok) done.push(box)
+    await sleep(2000) // 서버 배려
+  }
+  if (!done.length) throw new Error('모든 구역 실패')
+  return { elements: [...byId.values()], done }
 }
 
 /** Overpass 결과 → 10도 칸별 묶음 */
@@ -70,17 +92,18 @@ export function build(elements) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const elements = await fetchAll()
+  const { elements, done } = await fetchAll()
   const { tiles, count } = build(elements)
   mkdirSync(OUT, { recursive: true })
   for (const [key, rows] of Object.entries(tiles)) writeFileSync(new URL(`${key}.json`, OUT), JSON.stringify(rows))
-  // 앱은 index에 있는 칸만 받음
+  // 앱은 index에 있는 칸만 받고, 받지 못한 구역(chunks에 없음)은 실시간 조회로
   const index = {
     updated: new Date().toISOString().slice(0, 10),
     count,
     tiles: Object.fromEntries(Object.entries(tiles).map(([k, v]) => [k, v.length])),
+    chunks: done,
     source: '© OpenStreetMap contributors (ODbL)',
   }
   writeFileSync(new URL('index.json', OUT), JSON.stringify(index))
-  console.log(`완료: ${count}곳, 칸 ${Object.keys(tiles).length}개`)
+  console.log(`완료: ${count}곳, 칸 ${Object.keys(tiles).length}개, 받은 구역 ${done.length}/${CHUNKS.length}`)
 }

@@ -190,6 +190,8 @@ interface DatasetIndex {
   updated: string
   count: number
   tiles: Record<string, number>
+  /** 받은 구역 [남, 서, 북, 동] (없으면 전 세계) */
+  chunks?: [number, number, number, number][]
 }
 type Row = [string, string, string?, string?, number?, number?, string?, string?]
 
@@ -217,6 +219,8 @@ function loadTile(key: string): Promise<Row[]> {
 export async function findInDataset(lat: number, lon: number, radiusKm: number, lang: string): Promise<{ sites: OsmDiveSite[]; updated: string } | null> {
   const index = await loadIndex()
   if (!index) return null
+  // 데이터를 못 받은 구역이면 실시간 조회로
+  if (index.chunks && !index.chunks.some(([s, w, n, e]) => lat >= s && lat < n && lon >= w && lon < e)) return null
   const dLat = radiusKm / 111
   const dLon = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)))
   const keys = new Set<string>()
