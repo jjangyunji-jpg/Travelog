@@ -1,7 +1,7 @@
 // 전 세계 다이빙 포인트·다이빙샵을 OpenStreetMap에서 받아 앱의 데이터 파일로 저장
 // 실행: node scripts/build-dive-sites.mjs
 // 결과: public/dive-sites/index.json + 위도·경도 10도 칸별 파일 (앱은 필요한 지역 칸만 받음)
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 
 const OUT = new URL('../public/dive-sites/', import.meta.url)
 const ENDPOINTS = [
@@ -135,5 +135,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     source: '© OpenStreetMap contributors (ODbL)',
   }
   writeFileSync(indexUrl, JSON.stringify(index))
+  // 목록에 없는 옛날 칸 파일 정리
+  for (const f of readdirSync(OUT)) if (/^\d+_\d+\.json$/.test(f) && !tiles[f.replace('.json', '')]) unlinkSync(new URL(f, OUT))
   console.log(`완료: ${count}곳, 칸 ${Object.keys(tiles).length}개, 이번에 받은 구역 ${done.length}, 전체 받은 구역 ${chunks.length}/${CHUNKS.length}`)
 }
