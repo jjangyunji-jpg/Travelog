@@ -5,7 +5,7 @@ import type { DiveSpot } from '../data/diveSpots'
 import { useI18n } from '../i18n'
 import { allSpots } from '../dive'
 import { searchPlaces, type PlaceResult } from '../geo'
-import { findDiveShops, findDiveSites, type OsmDiveSite } from '../osm'
+import { findDiveShops, findDiveSites, findInDataset, type OsmDiveSite } from '../osm'
 import { countryAt } from '../divelog/match'
 import { uid, type AppData } from '../store'
 import Sheet from './Sheet'
@@ -38,6 +38,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState('')
   const [shops, setShops] = useState<OsmDiveSite[] | null>(null)
+  const [datasetDate, setDatasetDate] = useState('')
   const [cached, setCached] = useState(false)
   const [manual, setManual] = useState('')
 
@@ -52,6 +53,18 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
     if (!a) return
     setState('loading')
     setOsm(null)
+    setDatasetDate('')
+    // 1) 앱에 내장된 전 세계 데이터 파일 (바로 나옴, 서버가 붐벼도 됨)
+    const local = await findInDataset(a.lat, a.lon, r, lang).catch(() => null)
+    if (local) {
+      setOsm(local.sites)
+      setShops(null)
+      setDatasetDate(local.updated)
+      setCached(false)
+      setState('idle')
+      return
+    }
+    // 2) 데이터 파일이 없으면 실시간 조회
     // 다이빙샵(빠름)은 따로 먼저 → 포인트 서버가 붐벼도 샵 목록은 보이게
     findDiveShops(a.lat, a.lon, r)
       .then(setShops)
@@ -166,6 +179,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
                 )}
               </p>
             )}
+            {datasetDate && <p className="muted small">{pick(`📦 Travelog 다이빙 포인트 데이터 (${datasetDate} 기준)`, `📦 Travelog dataset (as of ${datasetDate})`)}</p>}
             {cached && <p className="muted small">{pick('📥 오프라인: 예전에 찾아 둔 결과예요.', '📥 Offline: showing saved results.')}</p>}
 
             {/* 2. 내 스팟 + 추천 스팟 */}

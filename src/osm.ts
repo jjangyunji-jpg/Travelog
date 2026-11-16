@@ -184,3 +184,54 @@ export async function findDiveShops(lat: number, lon: number, radiusKm: number):
     throw e
   }
 }
+
+/* ---------------- 내 데이터 파일 (public/dive-sites) ---------------- */
+interface DatasetIndex {
+  updated: string
+  count: number
+  tiles: Record<string, number>
+}
+type Row = [string, string, string?, string?, number?, number?, string?, string?]
+
+let indexPromise: Promise<DatasetIndex | null> | null = null
+function loadIndex(): Promise<DatasetIndex | null> {
+  indexPromise ??= fetch('/dive-sites/index.json')
+    .then((r) => (r.ok && (r.headers.get('content-type') ?? '').includes('json') ? r.json() : null))
+    .catch(() => null)
+  return indexPromise
+}
+const tileCache = new Map<string, Promise<Row[]>>()
+function loadTile(key: string): Promise<Row[]> {
+  if (!tileCache.has(key)) {
+    const p = fetch(`/dive-sites/${key}.json`).then((r) => (r.ok ? r.json() : []))
+    p.catch(() => tileCache.delete(key))
+    tileCache.set(key, p)
+  }
+  return tileCache.get(key)!
+}
+
+/**
+ * 앱에 내장된 전 세계 다이빙 포인트·샵 데이터에서 찾기 (빠르고 서버가 붐벼도 됨)
+ * 데이터 파일이 아직 없으면 null → 실시간 조회로
+ */
+export async function findInDataset(lat: number, lon: number, radiusKm: number, lang: string): Promise<{ sites: OsmDiveSite[]; updated: string } | null> {
+  const index = await loadIndex()
+  if (!index) return null
+  const dLat = radiusKm / 111
+  const dLon = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)))
+  const keys = new Set<string>()
+  for (const la of [lat - dLat, lat + dLat])
+    for (const lo of [lon - dLon, lon + dLon]) {
+      const wrapped = ((((lo + 180) % 360) + 360) % 360) - 180
+      keys.add(`${Math.floor((Math.max(-89.99, Math.min(89.99, la)) + 90) / 10)}_${Math.floor((wrapped + 180) / 10)}`)
+    }
+  const rows = (await Promise.all([...keys].filter((k) => index.tiles[k]).map(loadTile))).flat()
+  const sites: OsmDiveSite[] = []
+  for (const [id, en, ko, local, la, lo, kind, depth] of rows) {
+    if (la == null || lo == null || distKm(lat, lon, la, lo) > radiusKm) continue
+    const shop = kind === 'h'
+    const name = (lang === 'ko' ? ko || en : en || ko) || local || (shop ? (lang === 'ko' ? '이름 없는 다이빙샵' : 'Unnamed dive shop') : lang === 'ko' ? '이름 없는 포인트' : 'Unnamed site')
+    sites.push({ id: 'osm-' + id, name, lat: la, lon: lo, kind: shop ? 'shop' : 'site', depth: depth || undefined, local: local && local !== name ? local : undefined })
+  }
+  return { sites, updated: index.updated }
+}
