@@ -7,6 +7,7 @@ import CountrySelect from './CountrySelect'
 import PlacePicker from './PlacePicker'
 import { splitCities } from '../geo'
 import { Thumb } from './TripCard'
+import { addMonths } from '../trip'
 
 const addDays = (date: string, n: number) => {
   const d = new Date(date + 'T00:00:00Z')
@@ -23,6 +24,15 @@ const DURATIONS: [number, string, string][] = [
   [4, '4박5일', '5 days'],
   [6, '1주일', '1 week'],
   [13, '2주', '2 weeks'],
+]
+
+/** 살아보기 기간 [개월, 한국어, 영어] */
+const STAY_MONTHS: [number, string, string][] = [
+  [1, '1개월', '1 month'],
+  [2, '2개월', '2 months'],
+  [3, '3개월', '3 months'],
+  [6, '6개월', '6 months'],
+  [12, '1년', '1 year'],
 ]
 
 interface Props {
@@ -53,6 +63,7 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
   const added = useRef<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const up = (patch: Partial<Trip>) => setTrip((x) => ({ ...x, ...patch }))
+  const stay = trip.kind === 'stay'
   // 기간(박): 종료일 - 시작일
   const nights = trip.startDate && trip.endDate ? Math.max(0, Math.round((Date.parse(trip.endDate) - Date.parse(trip.startDate)) / 86400000)) : 0
   const setNights = (n: number) => trip.startDate && up({ endDate: addDays(trip.startDate, n) })
@@ -88,6 +99,12 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
   return (
     <Sheet onClose={cancel} title={initial ? t.editTrip : t.addTrip}>
       <form className="trip-form" onSubmit={submit}>
+        <div className="seg kind-seg">
+          <button type="button" className={stay ? '' : 'on'} onClick={() => up({ kind: 'trip' })}>✈️ {pick('여행', 'Trip')}</button>
+          <button type="button" className={stay ? 'on lived' : ''} onClick={() => up({ kind: 'stay', ...(nights < 27 && trip.startDate ? { endDate: addMonths(trip.startDate, 1) } : {}) })}>
+            🏡 {pick('살아보기', 'Living')}
+          </button>
+        </div>
         <label>
           <span>{t.country}</span>
           <CountrySelect value={trip.country} onChange={(code) => up({ country: code })} />
@@ -133,19 +150,49 @@ export default function TripForm({ initial, country, onSave, onDelete, onClose }
           </label>
         </div>
         <div className="duration">
-          <div className="dur-chips">
-            {DURATIONS.map(([n, ko, en]) => (
-              <button type="button" key={n} className={nights === n ? 'pill on' : 'pill'} onClick={() => setNights(n)}>
-                {pick(ko, en)}
-              </button>
-            ))}
-          </div>
+          {stay ? (
+            <div className="dur-chips">
+              {STAY_MONTHS.map(([m, ko, en]) => (
+                <button
+                  type="button"
+                  key={m}
+                  className={trip.startDate && trip.endDate === addMonths(trip.startDate, m) ? 'pill on' : 'pill'}
+                  onClick={() => trip.startDate && up({ endDate: addMonths(trip.startDate, m) })}
+                >
+                  {pick(ko, en)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="dur-chips">
+              {DURATIONS.map(([n, ko, en]) => (
+                <button type="button" key={n} className={nights === n ? 'pill on' : 'pill'} onClick={() => setNights(n)}>
+                  {pick(ko, en)}
+                </button>
+              ))}
+            </div>
+          )}
+          {stay ? (
+            <b className="stay-len">{pick(`${nights + 1}일`, `${nights + 1} days`)}{nights + 1 >= 28 && ` · ${pick('살아봤어요로 표시돼요', 'marked as lived')}`}</b>
+          ) : (
           <div className="dur-step">
             <button type="button" aria-label="-1" onClick={() => setNights(Math.max(0, nights - 1))} disabled={nights <= 0}>－</button>
             <b>{nights === 0 ? pick('당일', 'Day trip') : pick(`${nights}박 ${nights + 1}일`, `${nights} night${nights > 1 ? 's' : ''}`)}</b>
             <button type="button" aria-label="+1" onClick={() => setNights(nights + 1)}>＋</button>
           </div>
+          )}
         </div>
+        <label className="diary-check">
+          <input type="checkbox" checked={!!trip.diary} onChange={(e) => up({ diary: e.target.checked })} />
+          <span>
+            <b>📔 {pick('하루하루 일기 쓰기', 'Keep a daily diary')}</b>
+            <small className="muted">
+              {stay
+                ? pick('켜면 날짜별로 일기·사진을 남기고, 주 단위로 접어서 보여줘요', 'Daily entries, grouped by week')
+                : pick('켜면 Day 1, Day 2… 날짜별로 일기·사진을 남겨요', 'Write entries for each day')}
+            </small>
+          </span>
+        </label>
         <label>
           <span>{t.note}</span>
           <textarea rows={6} value={trip.note} onChange={(e) => up({ note: e.target.value })} placeholder={t.notePh} />

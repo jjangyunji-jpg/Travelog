@@ -5,7 +5,7 @@ import type { DiveSpot } from '../data/diveSpots'
 import { useI18n } from '../i18n'
 import { allSpots } from '../dive'
 import { searchPlaces, type PlaceResult } from '../geo'
-import { findDiveSites, type OsmDiveSite } from '../osm'
+import { findDiveShops, findDiveSites, type OsmDiveSite } from '../osm'
 import { countryAt } from '../divelog/match'
 import { uid, type AppData } from '../store'
 import Sheet from './Sheet'
@@ -37,6 +37,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
   const [osm, setOsm] = useState<OsmDiveSite[] | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [errMsg, setErrMsg] = useState('')
+  const [shops, setShops] = useState<OsmDiveSite[] | null>(null)
   const [cached, setCached] = useState(false)
   const [manual, setManual] = useState('')
 
@@ -50,6 +51,11 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
   const search = async (a = area, r = radius) => {
     if (!a) return
     setState('loading')
+    setOsm(null)
+    // 다이빙샵(빠름)은 따로 먼저 → 포인트 서버가 붐벼도 샵 목록은 보이게
+    findDiveShops(a.lat, a.lon, r)
+      .then(setShops)
+      .catch(() => setShops(null))
     try {
       const res = await findDiveSites(a.lat, a.lon, r, lang)
       setOsm(res.sites)
@@ -74,7 +80,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
   )
   const savedIds = new Set(spots.map((s) => s.id))
   const osmSites = (osm ?? []).filter((x) => x.kind === 'site' && !savedIds.has(x.id))
-  const osmShops = (osm ?? []).filter((x) => x.kind === 'shop')
+  const osmShops = [...(osm ?? []).filter((x) => x.kind === 'shop'), ...(shops ?? [])].filter((x, i, arr) => arr.findIndex((y) => y.id === x.id || (Math.abs(y.lat - x.lat) < 0.0005 && Math.abs(y.lon - x.lon) < 0.0005)) === i)
 
   const countryOf = (lat: number, lon: number) => countryAt(lat, lon) ?? area?.country ?? country ?? ''
 
@@ -150,7 +156,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
             {state === 'loading' && <p className="muted small">{pick('OpenStreetMap에서 다이빙 포인트 찾는 중… (최대 20초씩, 서버 3곳 차례로)', 'Searching OpenStreetMap…')}</p>}
             {state === 'error' && (
               <p className="import-error small">
-                {pick('포인트를 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.', 'Could not load. Check your connection and retry.')}{' '}
+                {pick('다이빙 포인트 서버(OpenStreetMap)가 지금 붐벼서 응답이 없어요. 잠시 뒤 다시 시도해 주세요.', 'The dive-site server is busy. Please retry in a moment.')}{' '}
                 <button className="link-btn" onClick={() => search()}>{pick('다시 시도', 'Retry')}</button>
                 {errMsg && (
                   <details className="err-detail">
@@ -206,8 +212,15 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
                     </li>
                   ))}
                 </ul>
+
+              </section>
+            )}
+
+            {/* 다이빙샵 (포인트 서버가 붐벼도 보임) */}
+            {osmShops.length > 0 && (
+              <section>
                 {osmShops.length > 0 && (
-                  <details className="shops">
+                  <details className="shops" open={state === 'error' || osmSites.length === 0}>
                     <summary>🏪 {pick(`주변 다이빙샵 ${osmShops.length}곳`, `${osmShops.length} dive shops nearby`)}</summary>
                     <ul className="area-list">
                       {osmShops.map((x) => (
@@ -223,6 +236,7 @@ export default function AreaFinder({ data, initial, country, onAdd, onPickSpot, 
                     </ul>
                   </details>
                 )}
+                {state === 'error' && <p className="muted small">{pick('다이빙샵에 주변 포인트를 물어보거나, 아래에서 직접 추가해 보세요.', 'Ask a local shop about sites, or add your own below.')}</p>}
               </section>
             )}
 

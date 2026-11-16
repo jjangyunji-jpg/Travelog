@@ -562,3 +562,23 @@ h2, h3 { margin: 0; }
 .err-detail { margin-top: 6px; color: var(--text); }
 .err-detail summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .err-detail pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; background: var(--bg); border-radius: 8px; padding: 8px; margin: 6px 0 0; }
+
+/* ---------- 살아보기 · 일기 켜기 · 주간 ---------- */
+.kind-seg button { font-weight: 700; }
+.day-badge.stay { background: color-mix(in srgb, var(--lived-2) 22%, transparent); color: #a61e4d; }
+.stay-len { font-size: 13px; color: var(--muted); }
+.diary-check { flex-direction: row !important; align-items: flex-start; gap: 10px !important; background: var(--bg); border-radius: 12px; padding: 12px; cursor: pointer; }
+.diary-check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
+.diary-check > span { display: flex; flex-direction: column; gap: 2px; }
+.diary-check b { color: var(--text); }
+.diary-on { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 1.5px dashed var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); color: var(--primary); font-weight: 700; border-radius: 12px; padding: 12px; text-align: left; }
+.weeks { display: flex; flex-direction: column; gap: 8px; }
+.week { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.week.open { border-color: color-mix(in srgb, var(--primary) 40%, var(--line)); }
+.week-head { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: var(--bg); padding: 11px 12px; text-align: left; }
+.week-head .spacer { flex: 1; }
+.week-sum { color: var(--muted); white-space: nowrap; }
+.chev { color: var(--muted); width: 14px; text-align: center; }
+.week .day-list { margin: 10px 10px 10px 18px; }
+.day-head b, .day-head .muted { white-space: nowrap; }
+.day-head .muted { overflow: hidden; text-overflow: ellipsis; min-width: 0; }

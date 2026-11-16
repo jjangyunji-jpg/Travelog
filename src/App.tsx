@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { COUNTRY_BY_CODE } from './data/countries'
 import { I18nContext, useI18n, type Lang } from './i18n'
-import { exportBackup, importBackup, uid, useAppData, type Dive, type Trip } from './store'
+import { exportBackup, importBackup, LIVED_TIERS, uid, useAppData, type Dive, type Trip } from './store'
 import { computeStats, livedLevel, visitCounts, visitLevel } from './stats'
 import { geocodeCities, geocodeFromTitle, splitCities } from './geo'
 import { diveNumbers, sortDivesDesc, spotMap } from './dive'
@@ -10,7 +10,7 @@ import CountrySheet from './components/CountrySheet'
 import TripForm from './components/TripForm'
 import TripDetail from './components/TripDetail'
 import DayForm, { fmtDay } from './components/DayForm'
-import { dayNumber, isOngoing, todayStr } from './trip'
+import { dayNumber, diaryOn, isOngoing, tierFromDays, todayStr, tripLength } from './trip'
 import StatsView from './components/StatsView'
 import CountryListView from './components/CountryListView'
 import JournalView from './components/JournalView'
@@ -218,7 +218,7 @@ function Main() {
   }
 
   const recentDives = sortDivesDesc(data.dives).slice(0, 3)
-  const ongoing = data.trips.find((x) => isOngoing(x))
+  const ongoing = data.trips.find((x) => isOngoing(x) && diaryOn(x))
   const cNameOf = (code: string) => (lang === 'ko' ? COUNTRY_BY_CODE[code]?.nameKo : COUNTRY_BY_CODE[code]?.nameEn) ?? code
 
   // 생물 도감 사진을 모두 기기에 저장 (작은 사진 + 썸네일)
@@ -264,7 +264,7 @@ function Main() {
               <button className="now-banner" onClick={() => setModal({ kind: 'day', tripId: ongoing.id, date: todayStr() })}>
                 <span>✈️</span>
                 <span className="now-text">
-                  <b>{lang === 'ko' ? '지금 여행 중' : 'On a trip'} · {ongoing.title || ongoing.city || cNameOf(ongoing.country)} · Day {dayNumber(ongoing, todayStr())}</b>
+                  <b>{ongoing.kind === 'stay' ? (lang === 'ko' ? '지금 지내는 중' : 'Living in') : lang === 'ko' ? '지금 여행 중' : 'On a trip'} · {ongoing.title || ongoing.city || cNameOf(ongoing.country)} · Day {dayNumber(ongoing, todayStr())}</b>
                   <small>{fmtDay(todayStr(), lang)} — {lang === 'ko' ? '오늘 일기 쓰기 ›' : "Write today's entry ›"}</small>
                 </span>
               </button>
@@ -421,6 +421,9 @@ function Main() {
           country={modal.country}
           onSave={(trip) => {
             saveTrip(trip)
+            const tier = trip.kind === 'stay' ? tierFromDays(tripLength(trip)) : undefined
+            const cur = data.statuses[trip.country] === 'lived' ? data.lived?.[trip.country] : undefined
+            if (tier && (!cur || LIVED_TIERS.indexOf(tier) > LIVED_TIERS.indexOf(cur))) setStatus(trip.country, 'lived', tier)
             setModal({ kind: 'trip', trip, back: modal.back })
           }}
           onDelete={(id) => {
@@ -438,6 +441,7 @@ function Main() {
             trip={live}
             onEdit={() => setModal({ kind: 'form', trip: live, back: modal.back })}
             onDay={(date) => setModal({ kind: 'day', tripId: live.id, date, back: { kind: 'trip', trip: live, back: modal.back } })}
+            onDiary={() => patchTrips({ [live.id]: { diary: true } })}
             onFindDive={() => {
               const pl = live.places![0]
               setModal({ kind: 'area', area: { name: pl.name, lat: pl.lat, lon: pl.lon, country: live.country }, country: live.country, back: { kind: 'trip', trip: live, back: modal.back } })

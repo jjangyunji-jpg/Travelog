@@ -15,7 +15,7 @@ export interface OsmDiveSite {
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
 const KEY = 'travelog:osm:v2:'
@@ -31,7 +31,7 @@ const distKm = (aLat: number, aLon: number, bLat: number, bLon: number) => {
 /** 한 서버에 요청 (20초 넘으면 포기하고 다음 서버로) */
 async function ask(url: string, query: string, usePost: boolean): Promise<{ elements?: El[]; remark?: string }> {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 20000)
+  const timer = setTimeout(() => ctrl.abort(), 15000)
   // (가벼운 질의라 보통 1~2초)
   try {
     const res = usePost
@@ -46,7 +46,7 @@ async function ask(url: string, query: string, usePost: boolean): Promise<{ elem
     }
   } catch (e) {
     const err = e as Error
-    throw new Error(err.name === 'AbortError' ? '시간 초과(20초)' : err.message || String(e))
+    throw new Error(err.name === 'AbortError' ? '시간 초과(15초)' : err.message || String(e))
   } finally {
     clearTimeout(timer)
   }
@@ -59,7 +59,8 @@ export async function findDiveSites(lat: number, lon: number, radiusKm: number, 
   const dLat = radiusKm / 111
   const dLon = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)))
   const bb = `(${(lat - dLat).toFixed(4)},${(lon - dLon).toFixed(4)},${(lat + dLat).toFixed(4)},${(lon + dLon).toFixed(4)})`
-  const query = `[out:json][timeout:15];(nwr["sport"~"^(scuba_diving|free_diving)$"]${bb};nwr["leisure"="dive_site"]${bb};);out tags center 150;`
+  // 정확한 태그 값만 사용 (정규식은 서버가 전 세계 sport 값을 다 훑어서 느림)
+  const query = `[out:json][timeout:12];(nwr["sport"="scuba_diving"]${bb};nwr["leisure"="dive_site"]${bb};nwr["sport"="free_diving"]${bb};);out tags center 150;`
   const errors: string[] = []
   for (const url of ENDPOINTS) {
     // 서버마다 POST, 안 되면 GET 한 번 더
@@ -120,4 +121,44 @@ function parse(elements: El[], lang: string): OsmDiveSite[] {
     })
   }
   return out
+}
+
+/**
+ * 주변 다이빙샵·센터 (Photon 지도 검색: 빠르고 안정적, OpenStreetMap 데이터)
+ * Photon은 다이빙 '포인트'는 다루지 않아서 샵만 여기서 가져옴
+ */
+export async function findDiveShops(lat: number, lon: number, radiusKm: number): Promise<OsmDiveSite[]> {
+  const key = `${KEY}shops:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm}`
+  try {
+    const tags = ['amenity:dive_centre', 'shop:scuba_diving']
+    const lists = await Promise.all(
+      tags.map(async (tag) => {
+        const q = new URLSearchParams({ lat: String(lat), lon: String(lon), radius: String(Math.min(radiusKm, 50)), limit: '50', osm_tag: tag })
+        const res = await fetch(`https://photon.komoot.io/reverse?${q}`)
+        if (!res.ok) throw new Error('photon ' + res.status)
+        const json = await res.json()
+        return (json.features ?? []) as { properties: { osm_type: string; osm_id: number; name?: string }; geometry: { coordinates: [number, number] } }[]
+      }),
+    )
+    const seen = new Set<string>()
+    const out: OsmDiveSite[] = []
+    for (const f of lists.flat()) {
+      const id = `osm-${f.properties.osm_type.toLowerCase()}${f.properties.osm_id}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      const [flon, flat] = f.geometry.coordinates
+      if (distKm(lat, lon, flat, flon) > radiusKm) continue
+      out.push({ id, name: f.properties.name || 'Dive shop', lat: flat, lon: flon, kind: 'shop' })
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(out))
+    } catch {
+      /* 무시 */
+    }
+    return out
+  } catch (e) {
+    const saved = localStorage.getItem(key)
+    if (saved) return JSON.parse(saved)
+    throw e
+  }
 }

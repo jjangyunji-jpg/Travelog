@@ -23,6 +23,10 @@ export interface Trip {
   endDate: string
   note: string
   photoIds: string[]
+  /** 여행 / 살아보기 */
+  kind?: 'trip' | 'stay'
+  /** 하루하루 일기 쓰기 (켰을 때만 날짜별 줄) */
+  diary?: boolean
   /** 하루하루 일기 */
   days?: TripDay[]
   /** 간 도시 좌표 (지도 '도시 보기'에 점으로 표시) */

@@ -33,7 +33,8 @@ export default function TripCard({ trip, onClick, showCountry = true }: { trip: 
         <div className="trip-date">
           {formatRange(trip, lang)}
           {writtenDays(trip) > 0 && <span className="day-badge">📔 {lang === 'ko' ? `${writtenDays(trip)}일 기록` : `${writtenDays(trip)} days`}</span>}
-          {isOngoing(trip) && <span className="day-badge now">✈️ {lang === 'ko' ? '여행 중' : 'Now'}</span>}
+          {trip.kind === 'stay' && <span className="day-badge stay">🏡 {lang === 'ko' ? '살아보기' : 'Living'}</span>}
+          {isOngoing(trip) && <span className="day-badge now">{trip.kind === 'stay' ? '📍' : '✈️'} {lang === 'ko' ? (trip.kind === 'stay' ? '지내는 중' : '여행 중') : 'Now'}</span>}
         </div>
         {previewNote(trip) && <div className="trip-note">{previewNote(trip)}</div>}
       </div>
