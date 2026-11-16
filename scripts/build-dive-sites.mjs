@@ -21,7 +21,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function ask(url, q) {
   const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 200 * 1000)
+  const t = setTimeout(() => ctrl.abort(), 180 * 1000)
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -38,13 +38,20 @@ async function ask(url, q) {
   }
 }
 
-/** 구역마다 서버를 바꿔 가며 최대 3바퀴 시도. 받은 구역 목록도 돌려줌 */
+// GitHub Actions 60분 제한 전에 받은 데이터까지 저장하고 끝내기
+const DEADLINE = Date.now() + Number(process.env.DIVE_DEADLINE_MIN ?? 48) * 60 * 1000
+
+/** 구역마다 서버를 바꿔 가며 최대 2바퀴 시도. 받은 구역 목록도 돌려줌 */
 async function fetchAll() {
   const byId = new Map()
   const done = []
   for (const [i, box] of CHUNKS.entries()) {
+    if (Date.now() > DEADLINE) {
+      console.log(`마감 시간: ${i}/${CHUNKS.length} 구역까지 저장하고 종료 (나머지는 다음 실행에서)`)
+      break
+    }
     let ok = false
-    for (let round = 0; round < 3 && !ok; round++) {
+    for (let round = 0; round < 2 && !ok && Date.now() < DEADLINE; round++) {
       for (const url of ENDPOINTS) {
         try {
           const els = await ask(url, query(box))
@@ -54,10 +61,10 @@ async function fetchAll() {
           break
         } catch (e) {
           console.log(`구역 ${i + 1} 실패 ${new URL(url).hostname}: ${e.message}`)
-          await sleep(3000)
+          await sleep(2000)
         }
       }
-      if (!ok) await sleep(20000 * (round + 1))
+      if (!ok) await sleep(10000)
     }
     if (ok) done.push(box)
     await sleep(2000) // 서버 배려
